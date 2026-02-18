@@ -20,7 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	exec "golang.org/x/sys/execabs"
@@ -69,7 +69,7 @@ func LaunchEditor(repo repository.Repo, fileName string) (string, error) {
 		return "", fmt.Errorf("Editing finished with error: %v\n", err)
 	}
 
-	output, err := ioutil.ReadFile(path)
+	output, err := os.ReadFile(path)
 	if err != nil {
 		os.Remove(path)
 		return "", fmt.Errorf("Error reading edited file: %v\n", err)
@@ -90,7 +90,7 @@ func FromFile(fileName string) (string, error) {
 		}
 		if (stat.Mode() & os.ModeCharDevice) == 0 {
 			// There is no tty. This will allow us to read piped data instead.
-			output, err := ioutil.ReadAll(os.Stdin)
+			output, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				return "", fmt.Errorf("Error reading from stdin: %v\n", err)
 			}
@@ -107,7 +107,7 @@ func FromFile(fileName string) (string, error) {
 		return output.String(), nil
 	}
 
-	output, err := ioutil.ReadFile(fileName)
+	output, err := os.ReadFile(fileName)
 	if err != nil {
 		return "", fmt.Errorf("Error reading file: %v\n", err)
 	}
