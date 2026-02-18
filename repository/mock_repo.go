@@ -19,8 +19,8 @@ package repository
 import (
 	"crypto/sha1"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -70,21 +70,25 @@ type mockCommit struct {
 	Message string   `json:"message,omitempty"`
 	Time    string   `json:"time,omitempty"`
 	Parents []string `json:"parents,omitempty"`
+	Tree    string   `json:"tree,omitempty"`
 }
 
 // mockRepoForTest defines an instance of Repo that can be used for testing.
 type mockRepoForTest struct {
 	Head    string
-	Refs    map[string]string            `json:"refs,omitempty"`
-	Commits map[string]mockCommit        `json:"commits,omitempty"`
-	Notes   map[string]map[string]string `json:"notes,omitempty"`
+	Refs    map[string]string               `json:"refs,omitempty"`
+	Commits map[string]mockCommit           `json:"commits,omitempty"`
+	Notes   map[string]map[string]string    `json:"notes,omitempty"`
+	Blobs   map[string]string               `json:"-"`
+	Trees   map[string]map[string]TreeChild `json:"-"`
 }
 
-func (r *mockRepoForTest) createCommit(message string, time string, parents []string) (string, error) {
+func (r *mockRepoForTest) createCommit(message, time, tree string, parents []string) (string, error) {
 	newCommit := mockCommit{
 		Message: message,
 		Time:    time,
 		Parents: parents,
+		Tree:    tree,
 	}
 	newCommitJSON, err := json.Marshal(newCommit)
 	if err != nil {
@@ -230,7 +234,20 @@ func (r *mockRepoForTest) HasRef(ref string) (bool, error) {
 
 // HasObject reports whether or not the repo contains an object with the given hash
 func (r *mockRepoForTest) HasObject(hash string) (bool, error) {
-	return false, errors.New("Not implemented")
+	if _, ok := r.Commits[hash]; ok {
+		return true, nil
+	}
+	if r.Blobs != nil {
+		if _, ok := r.Blobs[hash]; ok {
+			return true, nil
+		}
+	}
+	if r.Trees != nil {
+		if _, ok := r.Trees[hash]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // VerifyCommit verifies that the supplied hash points to a known commit.
@@ -455,7 +472,7 @@ func (r *mockRepoForTest) ArchiveRef(ref, archive string) error {
 	} else {
 		archiveParents = []string{commitToArchive}
 	}
-	archiveCommit, err := r.createCommit("Archiving", "Nowish", archiveParents)
+	archiveCommit, err := r.createCommit("Archiving", "Nowish", "", archiveParents)
 	if err != nil {
 		return err
 	}
@@ -484,7 +501,7 @@ func (r *mockRepoForTest) MergeRef(ref string, fastForward bool, messages ...str
 		message := strings.Join(messages, "\n\n")
 		time := newCommit.Time
 		parents := []string{origCommit, newCommitHash}
-		newCommitHash, err = r.createCommit(message, time, parents)
+		newCommitHash, err = r.createCommit(message, time, "", parents)
 		if err != nil {
 			return err
 		}
@@ -500,7 +517,7 @@ func (r *mockRepoForTest) RebaseRef(ref string) error {
 	if err != nil {
 		return err
 	}
-	newCommitHash, err := r.createCommit(origCommit.Message, origCommit.Time, []string{parentHash})
+	newCommitHash, err := r.createCommit(origCommit.Message, origCommit.Time, origCommit.Tree, []string{parentHash})
 	if err != nil {
 		return err
 	}
@@ -552,33 +569,77 @@ func (r *mockRepoForTest) ListCommitsBetween(from, to string) ([]string, error) 
 
 // StoreBlob writes the given file to the repository and returns its hash.
 func (r *mockRepoForTest) StoreBlob(contents string) (string, error) {
-	return "", fmt.Errorf("not implemented")
+	hash := fmt.Sprintf("%x", sha1.Sum([]byte(contents)))
+	if r.Blobs == nil {
+		r.Blobs = make(map[string]string)
+	}
+	r.Blobs[hash] = contents
+	return hash, nil
 }
 
 // StoreTree writes the given file tree to the repository and returns its hash.
 func (r *mockRepoForTest) StoreTree(contents map[string]TreeChild) (string, error) {
-	return "", fmt.Errorf("not implemented")
+	var names []string
+	for name := range contents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var parts []string
+	for _, name := range names {
+		child := contents[name]
+		childHash, err := child.Store(r)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s:%s", child.Type(), name, childHash))
+	}
+	hash := fmt.Sprintf("%x", sha1.Sum([]byte(strings.Join(parts, ","))))
+	if r.Trees == nil {
+		r.Trees = make(map[string]map[string]TreeChild)
+	}
+	r.Trees[hash] = contents
+	return hash, nil
 }
 
 // ReadTree reads the file tree pointed to by the given ref or hash from the repository.
 func (r *mockRepoForTest) ReadTree(ref string) (*Tree, error) {
-	return nil, fmt.Errorf("not implemented")
+	if r.Trees == nil {
+		return nil, fmt.Errorf("tree %q not found", ref)
+	}
+	if contents, ok := r.Trees[ref]; ok {
+		return NewTree(contents), nil
+	}
+	return nil, fmt.Errorf("tree %q not found", ref)
 }
 
 // CreateCommit creates a commit object and returns its hash.
 func (r *mockRepoForTest) CreateCommit(details *CommitDetails) (string, error) {
-	return "", fmt.Errorf("not implemented")
+	return r.createCommit(details.Summary, details.Time, details.Tree, details.Parents)
 }
 
 // CreateCommitWithTree creates a commit object with the given tree and returns its hash.
 func (r *mockRepoForTest) CreateCommitWithTree(details *CommitDetails, t *Tree) (string, error) {
-	return "", fmt.Errorf("not implemented")
+	treeHash, err := r.StoreTree(t.Contents())
+	if err != nil {
+		return "", err
+	}
+	details.Tree = treeHash
+	return r.CreateCommit(details)
 }
 
 // SetRef sets the commit pointed to by the specified ref to `newCommitHash`,
-// iff the ref currently points `previousCommitHash`.
+// iff the ref currently points to `previousCommitHash`.
+// When previousCommitHash is empty, the update is unconditional (matching
+// git update-ref semantics).
 func (r *mockRepoForTest) SetRef(ref, newCommitHash, previousCommitHash string) error {
-	return fmt.Errorf("not implemented")
+	if previousCommitHash != "" {
+		currentHash, ok := r.Refs[ref]
+		if !ok || currentHash != previousCommitHash {
+			return fmt.Errorf("ref %q does not point to %q", ref, previousCommitHash)
+		}
+	}
+	r.Refs[ref] = newCommitHash
+	return nil
 }
 
 // GetNotes reads the notes from the given ref that annotate the given revision.

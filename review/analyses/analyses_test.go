@@ -47,7 +47,6 @@ func mockHandler(t *testing.T) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		t.Log(r)
 		fmt.Fprintln(w, mockResults)
-		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -73,5 +72,86 @@ func TestGetLatestResult(t *testing.T) {
 	}
 	if len(reportResult) != 1 {
 		t.Fatal("Unexpected report result", reportResult)
+	}
+}
+
+func TestGetNotesFromServer(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(mockHandler(t)))
+	defer mockServer.Close()
+
+	report := Report{
+		Timestamp: "1",
+		URL:       mockServer.URL,
+	}
+	notes, err := report.GetNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(notes))
+	}
+	if notes[0].Category != "test" {
+		t.Fatalf("unexpected category: %q", notes[0].Category)
+	}
+	if notes[0].Description != "This is a test" {
+		t.Fatalf("unexpected description: %q", notes[0].Description)
+	}
+}
+
+func TestGetLintReportResultEmptyURL(t *testing.T) {
+	report := Report{Timestamp: "1", URL: ""}
+	result, err := report.GetLintReportResult()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result for empty URL, got %+v", result)
+	}
+}
+
+func TestGetLatestAnalysesReportEmpty(t *testing.T) {
+	report, err := GetLatestAnalysesReport(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report != nil {
+		t.Fatalf("expected nil for nil reports, got %+v", report)
+	}
+
+	report, err = GetLatestAnalysesReport([]Report{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report != nil {
+		t.Fatalf("expected nil for empty slice, got %+v", report)
+	}
+}
+
+func TestParseValid(t *testing.T) {
+	note := repository.Note(`{"timestamp":"42","url":"http://example.com","status":"lgtm"}`)
+	report, err := Parse(note)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Timestamp != "42" || report.URL != "http://example.com" || report.Status != StatusLooksGoodToMe {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+}
+
+func TestParseInvalid(t *testing.T) {
+	_, err := Parse(repository.Note(`not json`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseAllValidFiltersWrongVersion(t *testing.T) {
+	notes := []repository.Note{
+		repository.Note(`{"timestamp":"1","v":1,"status":"lgtm"}`),
+		repository.Note(`{"timestamp":"2","status":"lgtm"}`),
+	}
+	reports := ParseAllValid(notes)
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 valid report, got %d", len(reports))
 	}
 }

@@ -83,3 +83,72 @@ func TestCIReport(t *testing.T) {
 		t.Fatal("This is not the latest ", latestReport)
 	}
 }
+
+func TestGetLatestCIReportEmpty(t *testing.T) {
+	report, err := GetLatestCIReport(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report != nil {
+		t.Fatalf("expected nil for empty reports, got %+v", report)
+	}
+
+	report, err = GetLatestCIReport([]Report{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report != nil {
+		t.Fatalf("expected nil for empty slice, got %+v", report)
+	}
+}
+
+func TestParseValid(t *testing.T) {
+	note := repository.Note(`{"timestamp":"42","url":"http://example.com","status":"success"}`)
+	report, err := Parse(note)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Timestamp != "42" || report.URL != "http://example.com" || report.Status != StatusSuccess {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+}
+
+func TestParseInvalid(t *testing.T) {
+	_, err := Parse(repository.Note(`not json`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseAllValidFiltersInvalidStatus(t *testing.T) {
+	notes := []repository.Note{
+		repository.Note(testCINote1),
+		repository.Note(testCINote3), // "something else" status - filtered out
+		repository.Note(testCINote5),
+	}
+	reports := ParseAllValid(notes)
+	if len(reports) != 2 {
+		t.Fatalf("expected 2 valid reports, got %d", len(reports))
+	}
+}
+
+func TestParseAllValidFiltersWrongVersion(t *testing.T) {
+	notes := []repository.Note{
+		repository.Note(`{"timestamp":"1","status":"success","v":1}`),
+		repository.Note(testCINote1),
+	}
+	reports := ParseAllValid(notes)
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 valid report, got %d", len(reports))
+	}
+}
+
+func TestParseAllValidEmptyStatus(t *testing.T) {
+	notes := []repository.Note{
+		repository.Note(`{"timestamp":"1"}`),
+	}
+	reports := ParseAllValid(notes)
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 report (empty status is valid), got %d", len(reports))
+	}
+}
