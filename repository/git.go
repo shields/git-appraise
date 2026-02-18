@@ -130,15 +130,13 @@ func (repo *GitRepo) HasRef(ref string) (bool, error) {
 
 // HasObject returns whether or not the repo contains an object with the given hash.
 func (repo *GitRepo) HasObject(hash string) (bool, error) {
-	_, err := repo.runGitCommand("cat-file", "-e", hash)
+	_, _, err := repo.runGitCommandRaw("cat-file", "-e", "--", hash)
 	if err == nil {
-		// We verified the object exists
 		return true, nil
 	}
 	if _, ok := err.(*exec.ExitError); ok {
 		return false, nil
 	}
-	// Got an unexpected error
 	return false, err
 }
 
@@ -1025,7 +1023,10 @@ func (repo *GitRepo) Remotes() ([]string, error) {
 	remoteNames := strings.Split(remotes, "\n")
 	var result []string
 	for _, name := range remoteNames {
-		result = append(result, strings.TrimSpace(name))
+		name = strings.TrimSpace(name)
+		if name != "" {
+			result = append(result, name)
+		}
 	}
 	sort.Strings(result)
 	return result, nil
