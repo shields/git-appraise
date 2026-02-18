@@ -331,7 +331,7 @@ func PrintInlineComments(r *review.Review, diffArgs ...string) error {
 					if rhs-1 >= 0 {
 						for _, thread := range lineThreads[file.NewName][uint32(rhs-1)] {
 							indent := strings.Repeat(" ", 2*digits+1)
-							showSubThread(r.Summary.Revision, r.Repo, thread, indent+"| ")
+							showSubThread(r.Repo, thread, indent+"| ")
 						}
 					}
 				}
