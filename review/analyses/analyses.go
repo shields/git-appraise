@@ -19,7 +19,8 @@ package analyses
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
+
 	"net/http"
 	"sort"
 	"strconv"
@@ -92,7 +93,7 @@ func (analysesReport Report) GetLintReportResult() ([]AnalyzeResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	analysesResults, err := ioutil.ReadAll(res.Body)
+	analysesResults, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return nil, err

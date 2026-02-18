@@ -20,6 +20,7 @@ package repository
 import (
 	"crypto/sha1"
 	"fmt"
+	"maps"
 )
 
 // Note represents the contents of a git-note
@@ -99,9 +100,7 @@ type Tree struct {
 // NewTree constructs a new *Tree object tied to the given repo with the given contents.
 func NewTree(contents map[string]TreeChild) *Tree {
 	immutableContents := make(map[string]TreeChild)
-	for k, v := range contents {
-		immutableContents[k] = v
-	}
+	maps.Copy(immutableContents, contents)
 	savedHashes := make(map[Repo]string)
 	return &Tree{
 		savedHashes: savedHashes,
@@ -130,9 +129,7 @@ func (t *Tree) Store(repo Repo) (string, error) {
 // effect on the underly Tree object.
 func (t *Tree) Contents() map[string]TreeChild {
 	result := make(map[string]TreeChild)
-	for k, v := range t.contents {
-		result[k] = v
-	}
+	maps.Copy(result, t.contents)
 	return result
 }
 

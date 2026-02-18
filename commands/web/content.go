@@ -99,7 +99,7 @@ func mdToHTML(md []byte) []byte {
 	return html
 }
 
-func ServeTemplate(v interface{}, p Paths, w io.Writer, name string, templ string) error {
+func ServeTemplate(v any, p Paths, w io.Writer, name string, templ string) error {
 	tmpl := template.New(name)
 	tmpl = tmpl.Funcs(map[string]any{
 		"u64":         func(i int) uint64 { return uint64(i) },

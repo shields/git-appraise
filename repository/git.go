@@ -692,7 +692,7 @@ func (repo *GitRepo) readTreeWithHash(ref, hash string) (*Tree, error) {
 		// This is possible if the tree is empty
 		return NewTree(contents), nil
 	}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		lineParts := strings.Split(line, "\t")
 		if len(lineParts) != 2 {
 			return nil, fmt.Errorf("malformed ls-tree output line: %q", line)
@@ -779,7 +779,7 @@ func (repo *GitRepo) GetNotes(notesRef, revision string) []Note {
 		// We just assume that this means there are no notes
 		return nil
 	}
-	for _, line := range strings.Split(rawNotes, "\n") {
+	for line := range strings.SplitSeq(rawNotes, "\n") {
 		notes = append(notes, Note([]byte(line)))
 	}
 	return notes
@@ -843,8 +843,8 @@ func splitBatchCatFileOutput(out *bytes.Buffer) (map[string][]byte, error) {
 	reader := bufio.NewReader(out)
 	for {
 		nameLine, err := reader.ReadString(byte('\n'))
-		if strings.HasSuffix(nameLine, "\n") {
-			nameLine = strings.TrimSuffix(nameLine, "\n")
+		if before, ok := strings.CutSuffix(nameLine, "\n"); ok {
+			nameLine = before
 		}
 		if err == io.EOF {
 			return contentsMap, nil
@@ -853,8 +853,8 @@ func splitBatchCatFileOutput(out *bytes.Buffer) (map[string][]byte, error) {
 			return nil, fmt.Errorf("Failure while reading the next object name: %v", err)
 		}
 		sizeLine, err := reader.ReadString(byte('\n'))
-		if strings.HasSuffix(sizeLine, "\n") {
-			sizeLine = strings.TrimSuffix(sizeLine, "\n")
+		if before, ok := strings.CutSuffix(sizeLine, "\n"); ok {
+			sizeLine = before
 		}
 		if err != nil {
 			return nil, fmt.Errorf("Failure while reading the next object size: %q - %v", nameLine, err)
@@ -1036,8 +1036,8 @@ func (repo *GitRepo) ListNotedRevisions(notesRef string) []string {
 	if err != nil {
 		return nil
 	}
-	notesList := strings.Split(notesListOut, "\n")
-	for _, notePair := range notesList {
+	notesList := strings.SplitSeq(notesListOut, "\n")
+	for notePair := range notesList {
 		noteParts := strings.SplitN(notePair, " ", 2)
 		if len(noteParts) == 2 {
 			objHash := noteParts[1]
@@ -1108,7 +1108,7 @@ func (repo *GitRepo) getRefHashes(refPattern string) (map[string]string, error) 
 		return nil, err
 	}
 	refsMap := make(map[string]string)
-	for _, line := range strings.Split(showRef, "\n") {
+	for line := range strings.SplitSeq(showRef, "\n") {
 		lineParts := strings.Split(line, " ")
 		if len(lineParts) != 2 {
 			return nil, fmt.Errorf("unexpected line in output of `git show-ref`: %q", line)
@@ -1253,8 +1253,8 @@ func (repo *GitRepo) FetchAndReturnNewReviewHashes(remote, notesRefPattern strin
 			return nil, err
 		}
 		// The name of the review matches the name of the notes tree entry, with slashes removed
-		reviews := strings.Split(strings.Replace(notes, "/", "", -1), "\n")
-		for _, review := range reviews {
+		reviews := strings.SplitSeq(strings.Replace(notes, "/", "", -1), "\n")
+		for review := range reviews {
 			updatedReviewSet[review] = struct{}{}
 		}
 	}

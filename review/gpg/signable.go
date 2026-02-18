@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	exec "golang.org/x/sys/execabs"
@@ -90,7 +89,7 @@ func Verify(s Signable) error {
 	if err != nil {
 		return err
 	}
-	sigFile, err := ioutil.TempFile("", "sig")
+	sigFile, err := os.CreateTemp("", "sig")
 	if err != nil {
 		return err
 	}
@@ -104,7 +103,7 @@ func Verify(s Signable) error {
 		return err
 	}
 
-	contentFile, err := ioutil.TempFile("", "content")
+	contentFile, err := os.CreateTemp("", "content")
 	if err != nil {
 		return err
 	}

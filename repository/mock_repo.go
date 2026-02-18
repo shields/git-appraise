@@ -605,7 +605,7 @@ func (r *mockRepoForTest) SetRef(ref, newCommitHash, previousCommitHash string) 
 func (r *mockRepoForTest) GetNotes(notesRef, revision string) []Note {
 	notesText := r.Notes[notesRef][revision]
 	var notes []Note
-	for _, line := range strings.Split(notesText, "\n") {
+	for line := range strings.SplitSeq(notesText, "\n") {
 		notes = append(notes, Note(line))
 	}
 	return notes

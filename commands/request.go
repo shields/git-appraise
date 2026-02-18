@@ -55,7 +55,7 @@ var (
 func buildRequestFromFlags(requester string) (request.Request, error) {
 	var reviewers []string
 	if len(*requestReviewers) > 0 {
-		for _, reviewer := range strings.Split(*requestReviewers, ",") {
+		for reviewer := range strings.SplitSeq(*requestReviewers, ",") {
 			reviewers = append(reviewers, strings.TrimSpace(reviewer))
 		}
 	}

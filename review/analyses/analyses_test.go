@@ -57,7 +57,7 @@ func TestGetLatestResult(t *testing.T) {
 
 	reports := ParseAllValid([]repository.Note{
 		repository.Note([]byte(mockOldReport)),
-		repository.Note([]byte(fmt.Sprintf(mockNewReport, mockServer.URL))),
+		repository.Note(fmt.Appendf(nil, mockNewReport, mockServer.URL)),
 	})
 
 	report, err := GetLatestAnalysesReport(reports)
