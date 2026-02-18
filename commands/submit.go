@@ -20,8 +20,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review"
 )
 
 var submitFlagSet = flag.NewFlagSet("submit", flag.ExitOnError)

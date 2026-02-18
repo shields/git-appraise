@@ -20,8 +20,8 @@ package request
 import (
 	"encoding/json"
 
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review/gpg"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review/gpg"
 )
 
 // Ref defines the git-notes ref that we expect to contain review requests.

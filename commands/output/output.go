@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review"
 )
 
 const (

@@ -18,7 +18,7 @@ limitations under the License.
 //
 // To install, run:
 //
-//    $ go get github.com/KoviRobi/git-appraise/git-appraise
+//    $ go install msrl.dev/git-appraise/git-appraise@latest
 //
 // And for usage information, run:
 //
@@ -27,8 +27,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/KoviRobi/git-appraise/commands"
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/commands"
+	"msrl.dev/git-appraise/repository"
 	"os"
 	"sort"
 	"strings"

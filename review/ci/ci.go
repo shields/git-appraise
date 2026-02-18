@@ -19,7 +19,7 @@ package ci
 
 import (
 	"encoding/json"
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/repository"
 	"sort"
 	"strconv"
 )

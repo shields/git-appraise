@@ -21,12 +21,12 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/KoviRobi/git-appraise/commands/input"
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review"
-	"github.com/KoviRobi/git-appraise/review/comment"
-	"github.com/KoviRobi/git-appraise/review/gpg"
-	"github.com/KoviRobi/git-appraise/review/request"
+	"msrl.dev/git-appraise/commands/input"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review"
+	"msrl.dev/git-appraise/review/comment"
+	"msrl.dev/git-appraise/review/gpg"
+	"msrl.dev/git-appraise/review/request"
 )
 
 var abandonFlagSet = flag.NewFlagSet("abandon", flag.ExitOnError)

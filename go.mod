@@ -1,4 +1,4 @@
-module github.com/KoviRobi/git-appraise
+module msrl.dev/git-appraise
 
 go 1.22
 

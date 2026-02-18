@@ -21,8 +21,8 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review"
 )
 
 var rebaseFlagSet = flag.NewFlagSet("rebase", flag.ExitOnError)

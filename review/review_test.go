@@ -17,9 +17,9 @@ limitations under the License.
 package review
 
 import (
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review/comment"
-	"github.com/KoviRobi/git-appraise/review/request"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review/comment"
+	"msrl.dev/git-appraise/review/request"
 	"sort"
 	"testing"
 )

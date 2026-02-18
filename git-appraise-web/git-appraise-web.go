@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/KoviRobi/git-appraise/commands/web"
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/commands/web"
+	"msrl.dev/git-appraise/repository"
 	"github.com/gorilla/websocket"
 )
 

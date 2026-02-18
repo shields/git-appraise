@@ -18,7 +18,7 @@ package analyses
 
 import (
 	"fmt"
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/repository"
 	"net/http"
 	"net/http/httptest"
 	"testing"

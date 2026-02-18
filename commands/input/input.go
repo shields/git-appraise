@@ -23,7 +23,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/repository"
 	exec "golang.org/x/sys/execabs"
 )
 

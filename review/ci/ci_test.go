@@ -17,7 +17,7 @@ limitations under the License.
 package ci
 
 import (
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/repository"
 	"testing"
 )
 

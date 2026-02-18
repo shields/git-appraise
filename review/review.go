@@ -23,12 +23,12 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/KoviRobi/git-appraise/repository"
-	"github.com/KoviRobi/git-appraise/review/analyses"
-	"github.com/KoviRobi/git-appraise/review/ci"
-	"github.com/KoviRobi/git-appraise/review/comment"
-	"github.com/KoviRobi/git-appraise/review/gpg"
-	"github.com/KoviRobi/git-appraise/review/request"
+	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review/analyses"
+	"msrl.dev/git-appraise/review/ci"
+	"msrl.dev/git-appraise/review/comment"
+	"msrl.dev/git-appraise/review/gpg"
+	"msrl.dev/git-appraise/review/request"
 )
 
 const archiveRef = "refs/devtools/archives/reviews"

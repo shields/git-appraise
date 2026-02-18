@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/repository"
 )
 
 const (

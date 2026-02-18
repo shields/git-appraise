@@ -19,7 +19,7 @@ package commands
 import (
 	"errors"
 	"fmt"
-	"github.com/KoviRobi/git-appraise/repository"
+	"msrl.dev/git-appraise/repository"
 )
 
 // push pushes the local git-notes used for reviews to a remote repo.
