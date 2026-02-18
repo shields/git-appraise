@@ -21,6 +21,7 @@ import (
 	"msrl.dev/git-appraise/review/comment"
 	"msrl.dev/git-appraise/review/request"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -866,5 +867,412 @@ func TestRebaseDetachedHead(t *testing.T) {
 	}
 	if !submittedReview.Submitted {
 		t.Fatalf("Failed to submit the review: %q", submittedReviewJSON)
+	}
+}
+
+func TestGetComments(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	comments, err := GetComments(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment thread for commit B, got %d", len(comments))
+	}
+}
+
+func TestGetCommentsNoComments(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	comments, err := GetComments(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 0 {
+		t.Fatalf("expected 0 comment threads for commit G, got %d", len(comments))
+	}
+}
+
+func TestGetSummary(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	summary, err := GetSummary(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary == nil {
+		t.Fatal("expected non-nil summary")
+	}
+	if summary.Revision != repository.TestCommitB {
+		t.Fatalf("unexpected revision: %q", summary.Revision)
+	}
+	if summary.Request.Description != "B" {
+		t.Fatalf("unexpected description: %q", summary.Request.Description)
+	}
+	if !summary.Submitted {
+		t.Fatal("expected review B to be submitted")
+	}
+}
+
+func TestGetSummaryViaRefs(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	summary, err := GetSummaryViaRefs(repo, request.Ref, comment.Ref, repository.TestCommitD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary == nil {
+		t.Fatal("expected non-nil summary")
+	}
+	if summary.Request.Description != "D" {
+		t.Fatalf("unexpected description: %q", summary.Request.Description)
+	}
+	if !summary.Submitted {
+		t.Fatal("expected review D to be submitted")
+	}
+}
+
+func TestGetSummaryViaRefsBadCommit(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	_, err := GetSummaryViaRefs(repo, request.Ref, comment.Ref, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent commit")
+	}
+}
+
+func TestGetSummaryPending(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	summary, err := GetSummary(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Submitted {
+		t.Fatal("expected review G to not be submitted")
+	}
+	if summary.IsAbandoned() {
+		t.Fatal("expected review G to not be abandoned")
+	}
+	if !summary.IsOpen() {
+		t.Fatal("expected review G to be open")
+	}
+}
+
+func TestGet(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review == nil {
+		t.Fatal("expected non-nil review")
+	}
+	if review.Revision != repository.TestCommitB {
+		t.Fatalf("unexpected revision: %q", review.Revision)
+	}
+}
+
+func TestListAll(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	reviews := ListAll(repo)
+	if len(reviews) != 3 {
+		t.Fatalf("expected 3 reviews, got %d", len(reviews))
+	}
+	for i := 0; i < len(reviews)-1; i++ {
+		if reviews[i].Request.Timestamp < reviews[i+1].Request.Timestamp {
+			t.Fatalf("reviews not sorted in reverse chronological order at index %d", i)
+		}
+	}
+}
+
+func TestListOpen(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	open := ListOpen(repo)
+	if len(open) != 1 {
+		t.Fatalf("expected 1 open review, got %d", len(open))
+	}
+	if open[0].Revision != repository.TestCommitG {
+		t.Fatalf("unexpected open review revision: %q", open[0].Revision)
+	}
+}
+
+func TestGetCurrent(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := GetCurrent(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review != nil {
+		t.Fatalf("expected nil review on master, got %+v", review)
+	}
+}
+
+func TestGetCurrentOnReviewBranch(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	if err := repo.SwitchToRef(repository.TestReviewRef); err != nil {
+		t.Fatal(err)
+	}
+	review, err := GetCurrent(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review == nil {
+		t.Fatal("expected non-nil review on review branch")
+	}
+	if review.Revision != repository.TestCommitG {
+		t.Fatalf("unexpected current review revision: %q", review.Revision)
+	}
+}
+
+func TestGetDiff(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff, err := review.GetDiff()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff == "" {
+		t.Fatal("expected non-empty diff")
+	}
+}
+
+func TestAddComment(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := comment.New("tester@example.com", "test comment")
+	c.Timestamp = "9999999999"
+	if err := review.AddComment(c); err != nil {
+		t.Fatal(err)
+	}
+	comments, err := GetComments(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment after adding, got %d", len(comments))
+	}
+}
+
+func TestListCommits(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commits, err := review.ListCommits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit in review")
+	}
+}
+
+func TestGetBuildStatusMessage(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := review.GetBuildStatusMessage()
+	if msg != "unknown" {
+		t.Fatalf("expected 'unknown' status with no CI reports, got %q", msg)
+	}
+}
+
+func TestGetAnalysesMessage(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := review.GetAnalysesMessage()
+	if msg != "No analyses available" {
+		t.Fatalf("expected 'No analyses available', got %q", msg)
+	}
+}
+
+func TestGetAnalysesNotes(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = review.GetAnalysesNotes()
+	if err == nil {
+		t.Fatal("expected error when no analyses available")
+	}
+}
+
+func TestSummaryGetJSON(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	summary, err := GetSummary(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonStr, err := summary.GetJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonStr == "" {
+		t.Fatal("expected non-empty JSON")
+	}
+	if !strings.Contains(jsonStr, "revision") {
+		t.Fatalf("JSON missing revision field: %s", jsonStr)
+	}
+}
+
+func TestReviewGetJSON(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonStr, err := review.GetJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonStr == "" {
+		t.Fatal("expected non-empty JSON")
+	}
+}
+
+func TestGetCommentsJSON(t *testing.T) {
+	threads := []CommentThread{
+		{
+			Comment: comment.Comment{
+				Timestamp:   "1",
+				Description: "test",
+			},
+		},
+	}
+	jsonStr, err := GetCommentsJSON(threads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(jsonStr, "test") {
+		t.Fatalf("JSON missing comment description: %s", jsonStr)
+	}
+}
+
+func TestIsAbandoned(t *testing.T) {
+	s := Summary{
+		Request: request.Request{TargetRef: ""},
+	}
+	if !s.IsAbandoned() {
+		t.Fatal("expected abandoned when TargetRef is empty")
+	}
+	s.Request.TargetRef = "refs/heads/master"
+	if s.IsAbandoned() {
+		t.Fatal("expected not abandoned when TargetRef is set")
+	}
+}
+
+func TestIsOpen(t *testing.T) {
+	s := Summary{
+		Request: request.Request{TargetRef: "refs/heads/master"},
+	}
+	if !s.IsOpen() {
+		t.Fatal("expected open for non-submitted, non-abandoned review")
+	}
+	s.Submitted = true
+	if s.IsOpen() {
+		t.Fatal("expected not open for submitted review")
+	}
+	s.Submitted = false
+	s.Request.TargetRef = ""
+	if s.IsOpen() {
+		t.Fatal("expected not open for abandoned review")
+	}
+}
+
+func TestSummariesSorting(t *testing.T) {
+	summaries := []Summary{
+		{Request: request.Request{Timestamp: "1"}},
+		{Request: request.Request{Timestamp: "3"}},
+		{Request: request.Request{Timestamp: "2"}},
+	}
+	sort.Stable(summariesWithNewestRequestsFirst(summaries))
+	if summaries[0].Request.Timestamp != "3" ||
+		summaries[1].Request.Timestamp != "2" ||
+		summaries[2].Request.Timestamp != "1" {
+		t.Fatalf("unexpected sort order: %v", summaries)
+	}
+}
+
+func TestDetails(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	summary, err := GetSummary(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := summary.Details()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review.Revision != repository.TestCommitG {
+		t.Fatalf("unexpected revision: %q", review.Revision)
+	}
+}
+
+func TestAddDetachedComment(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	c := comment.New("tester@example.com", "detached comment")
+	c.Timestamp = "9999999999"
+	c.Location = &comment.Location{Path: "test/path.go"}
+	if err := AddDetachedComment(repo, &c); err != nil {
+		t.Fatal(err)
+	}
+	threads, err := GetDetachedComments(repo, "test/path.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 detached comment thread, got %d", len(threads))
+	}
+	if threads[0].Comment.Description != "detached comment" {
+		t.Fatalf("unexpected description: %q", threads[0].Comment.Description)
+	}
+}
+
+func TestGetStartingCommit(t *testing.T) {
+	s := &Summary{Revision: "abc123"}
+	if s.getStartingCommit() != "abc123" {
+		t.Fatalf("expected revision as starting commit, got %q", s.getStartingCommit())
+	}
+	s.Request.Alias = "def456"
+	if s.getStartingCommit() != "def456" {
+		t.Fatalf("expected alias as starting commit, got %q", s.getStartingCommit())
+	}
+}
+
+func TestUpdateThreadsStatusEmpty(t *testing.T) {
+	result := updateThreadsStatus(nil)
+	if result != nil {
+		t.Fatalf("expected nil for empty threads, got %v", *result)
+	}
+}
+
+func TestBuildCommentThreadsEmpty(t *testing.T) {
+	threads := buildCommentThreads(map[string]comment.Comment{})
+	if len(threads) != 0 {
+		t.Fatalf("expected 0 threads for empty input, got %d", len(threads))
+	}
+}
+
+func TestPrettyPrintJSON(t *testing.T) {
+	result, err := prettyPrintJSON([]byte(`{"a":"b"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result, "\"a\"") {
+		t.Fatalf("unexpected pretty print result: %s", result)
+	}
+
+	_, err = prettyPrintJSON([]byte(`not json`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }

@@ -536,7 +536,32 @@ func (r *mockRepoForTest) RebaseRef(ref string) error {
 // The generated list is in chronological order (with the oldest commit first).
 //
 // If the specified ref does not exist, then this method returns an empty result.
-func (r *mockRepoForTest) ListCommits(ref string) []string { return nil }
+func (r *mockRepoForTest) ListCommits(ref string) []string {
+	commit, err := r.resolveLocalRef(ref)
+	if err != nil {
+		return nil
+	}
+	var result []string
+	queue := []string{commit}
+	visited := make(map[string]bool)
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if visited[c] {
+			continue
+		}
+		visited[c] = true
+		result = append(result, c)
+		if mc, ok := r.Commits[c]; ok {
+			queue = append(queue, mc.Parents...)
+		}
+	}
+	// Reverse for chronological order (oldest first).
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return result
+}
 
 // ListCommitsBetween returns the list of commits between the two given revisions.
 //
