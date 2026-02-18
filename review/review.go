@@ -342,9 +342,6 @@ func Get(repo repository.Repo, revision string) (*Review, error) {
 	if err != nil {
 		return nil, err
 	}
-	if summary == nil {
-		return nil, nil
-	}
 	return summary.Details()
 }
 

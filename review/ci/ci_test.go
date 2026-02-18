@@ -152,3 +152,13 @@ func TestParseAllValidEmptyStatus(t *testing.T) {
 		t.Fatalf("expected 1 report (empty status is valid), got %d", len(reports))
 	}
 }
+
+func TestGetLatestCIReportInvalidTimestamp(t *testing.T) {
+	reports := []Report{
+		{Timestamp: "not-a-number", URL: "http://example.com", Status: StatusSuccess},
+	}
+	_, err := GetLatestCIReport(reports)
+	if err == nil {
+		t.Fatal("expected error for non-numeric timestamp")
+	}
+}

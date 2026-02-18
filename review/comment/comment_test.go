@@ -248,3 +248,54 @@ func TestLocationCheckOutOfRange(t *testing.T) {
 		t.Fatal("expected error for out-of-range line")
 	}
 }
+
+func TestLocationCheckStartColumnTooLarge(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	// Show returns "B:file.txt" (10 chars) for commit B, path file.txt
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  &Range{StartLine: 1, StartColumn: 9999},
+	}
+	if err := loc.Check(repo); err == nil {
+		t.Fatal("expected error for column exceeding line length")
+	}
+}
+
+func TestLocationCheckEndLineTooLarge(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  &Range{StartLine: 1, EndLine: 9999},
+	}
+	if err := loc.Check(repo); err == nil {
+		t.Fatal("expected error for end line exceeding file length")
+	}
+}
+
+func TestLocationCheckEndColumnTooLarge(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  &Range{StartLine: 1, EndLine: 1, EndColumn: 9999},
+	}
+	if err := loc.Check(repo); err == nil {
+		t.Fatal("expected error for end column exceeding line length")
+	}
+}
+
+func TestRangeSetInvalidEndPart(t *testing.T) {
+	r := &Range{}
+	if err := r.Set("5:abc"); err == nil {
+		t.Fatal("expected error for non-numeric end line")
+	}
+}
+
+func TestRangeSetInvalidColumn(t *testing.T) {
+	r := &Range{}
+	if err := r.Set("5+abc"); err == nil {
+		t.Fatal("expected error for non-numeric column")
+	}
+}

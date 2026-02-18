@@ -155,3 +155,53 @@ func TestParseAllValidFiltersWrongVersion(t *testing.T) {
 		t.Fatalf("expected 1 valid report, got %d", len(reports))
 	}
 }
+
+func TestGetLatestAnalysesReportInvalidTimestamp(t *testing.T) {
+	reports := []Report{
+		{Timestamp: "not-a-number", URL: "http://example.com"},
+	}
+	_, err := GetLatestAnalysesReport(reports)
+	if err == nil {
+		t.Fatal("expected error for non-numeric timestamp")
+	}
+}
+
+func TestGetLintReportResultHTTPError(t *testing.T) {
+	report := Report{Timestamp: "1", URL: "http://127.0.0.1:1/nonexistent"}
+	_, err := report.GetLintReportResult()
+	if err == nil {
+		t.Fatal("expected error for unreachable URL")
+	}
+}
+
+func TestGetLintReportResultInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "not json at all")
+	}))
+	defer server.Close()
+
+	report := Report{Timestamp: "1", URL: server.URL}
+	_, err := report.GetLintReportResult()
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response")
+	}
+}
+
+func TestGetNotesError(t *testing.T) {
+	report := Report{Timestamp: "1", URL: "http://127.0.0.1:1/nonexistent"}
+	_, err := report.GetNotes()
+	if err == nil {
+		t.Fatal("expected error propagated from GetLintReportResult")
+	}
+}
+
+func TestGetNotesEmptyURL(t *testing.T) {
+	report := Report{Timestamp: "1", URL: ""}
+	notes, err := report.GetNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notes != nil {
+		t.Fatalf("expected nil notes for empty URL, got %v", notes)
+	}
+}
