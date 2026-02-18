@@ -28,11 +28,11 @@ import (
 // We initialize our mock repo with two branches (one of which holds a pending review),
 // and commit history that looks like this:
 //
-//  Master Branch:    A--B--D--E--F--J
-//                     \   /    \  \
-//                       C       \  \
-//                                \  \
-//  Review Branch:                 G--H--I
+//	Master Branch:    A--B--D--E--F--J
+//	                   \   /    \  \
+//	                     C       \  \
+//	                              \  \
+//	Review Branch:                 G--H--I
 //
 // Where commits "B" and "D" represent reviews that have been submitted, and "G"
 // is a pending review.
@@ -395,40 +395,39 @@ func (r *mockRepoForTest) Diff(left, right string, diffArgs ...string) (string, 
 
 // Diff1 computes the diff for a single commit.
 func (r *mockRepoForTest) Diff1(commit string, diffArgs ...string) (string, error) {
-	return r.Diff(commit, commit + "~", diffArgs...)
+	return r.Diff(commit, commit+"~", diffArgs...)
 }
 
 // Diff computes the diff between two given commits.
 func (r *mockRepoForTest) ParsedDiff(left, right string, diffArgs ...string) ([]FileDiff, error) {
 	return []FileDiff{
-			{
-				OldName: "foo",
-				NewName: "bar",
-				Fragments: []DiffFragment{
-					{
-						Comment: "",
-						OldPosition: 1,
-						OldLines: 1,
-						NewPosition: 1,
-						NewLines: 1,
-						LinesAdded: 1,
-						LinesDeleted: 1,
-						LeadingContext: 0,
-						TrailingContext: 0,
-						Lines: []DiffLine{
-							{OpDelete, "fooLine"},
-							{OpAdd, "barLine"},
-						},
+		{
+			OldName: "foo",
+			NewName: "bar",
+			Fragments: []DiffFragment{
+				{
+					Comment:         "",
+					OldPosition:     1,
+					OldLines:        1,
+					NewPosition:     1,
+					NewLines:        1,
+					LinesAdded:      1,
+					LinesDeleted:    1,
+					LeadingContext:  0,
+					TrailingContext: 0,
+					Lines: []DiffLine{
+						{OpDelete, "fooLine"},
+						{OpAdd, "barLine"},
 					},
 				},
 			},
-		}, nil
+		},
+	}, nil
 }
-
 
 // ParsedDiff1 computes the diff for a single commit.
 func (r *mockRepoForTest) ParsedDiff1(commit string, diffArgs ...string) ([]FileDiff, error) {
-	return r.ParsedDiff(commit, commit + "~", diffArgs...)
+	return r.ParsedDiff(commit, commit+"~", diffArgs...)
 }
 
 // Show returns the contents of the given file at the given commit.

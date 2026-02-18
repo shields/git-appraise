@@ -18,11 +18,11 @@ limitations under the License.
 //
 // To install, run:
 //
-//    $ go install msrl.dev/git-appraise/git-appraise@latest
+//	$ go install msrl.dev/git-appraise/git-appraise@latest
 //
 // And for usage information, run:
 //
-//    $ git-appraise help
+//	$ git-appraise help
 package main
 
 import (

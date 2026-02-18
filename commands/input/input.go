@@ -23,8 +23,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"msrl.dev/git-appraise/repository"
 	exec "golang.org/x/sys/execabs"
+	"msrl.dev/git-appraise/repository"
 )
 
 // LaunchEditor launches the default editor configured for the given repo. This

@@ -23,13 +23,13 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	exec "golang.org/x/sys/execabs"
 	"io"
 	"os"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	exec "golang.org/x/sys/execabs"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
@@ -376,33 +376,36 @@ func parsedDiff(diff string) ([]FileDiff, error) {
 			for _, line := range fragment.Lines {
 				var op DiffOp
 				switch line.Op {
-				case gitdiff.OpContext: op = OpContext
-				case gitdiff.OpAdd: op = OpAdd
-				case gitdiff.OpDelete: op = OpDelete
+				case gitdiff.OpContext:
+					op = OpContext
+				case gitdiff.OpAdd:
+					op = OpAdd
+				case gitdiff.OpDelete:
+					op = OpDelete
 				}
 				lines = append(lines, DiffLine{
-					Op: op,
+					Op:   op,
 					Line: strings.Trim(line.Line, "\n"),
 				})
 			}
 
 			fragments = append(fragments, DiffFragment{
-				Comment: fragment.Comment,
-				OldPosition: uint64(fragment.OldPosition),
-				OldLines: uint64(fragment.OldLines),
-				NewPosition: uint64(fragment.NewPosition),
-				NewLines: uint64(fragment.NewLines),
-				LinesAdded: uint64(fragment.LinesAdded),
-				LinesDeleted: uint64(fragment.LinesDeleted),
-				LeadingContext: uint64(fragment.LeadingContext),
+				Comment:         fragment.Comment,
+				OldPosition:     uint64(fragment.OldPosition),
+				OldLines:        uint64(fragment.OldLines),
+				NewPosition:     uint64(fragment.NewPosition),
+				NewLines:        uint64(fragment.NewLines),
+				LinesAdded:      uint64(fragment.LinesAdded),
+				LinesDeleted:    uint64(fragment.LinesDeleted),
+				LeadingContext:  uint64(fragment.LeadingContext),
 				TrailingContext: uint64(fragment.TrailingContext),
-				Lines: lines,
+				Lines:           lines,
 			})
 		}
 
 		fileDiff = append(fileDiff, FileDiff{
-			OldName: file.OldName,
-			NewName: file.NewName,
+			OldName:   file.OldName,
+			NewName:   file.NewName,
 			Fragments: fragments,
 		})
 	}

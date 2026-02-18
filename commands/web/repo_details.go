@@ -12,47 +12,48 @@ import (
 )
 
 type ReviewType int
+
 const (
-	OpenReview      ReviewType = iota
+	OpenReview ReviewType = iota
 	ClosedReview
 	AbandonedReview
 )
 
 type ReviewIndex struct {
-	Type   ReviewType
+	Type ReviewType
 	// Index into RepoDetails.Branches[...] for Open/ClosedReview
 	Branch int
 	// Index into RepoDetails.{Branches[...].{OpenReviews,ClosedReviews},.AbandonedReviews}
-	Index  int
+	Index int
 }
 
 type BranchDetails struct {
-	Ref                 string
-	Title               string
-	Subtitle            string
-	Description         string
-	OpenReviewCount     int
-	OpenReviews         []review.Summary
-	ClosedReviewCount   int
-	ClosedReviews       []review.Summary
+	Ref               string
+	Title             string
+	Subtitle          string
+	Description       string
+	OpenReviewCount   int
+	OpenReviews       []review.Summary
+	ClosedReviewCount int
+	ClosedReviews     []review.Summary
 }
 
 type BranchList []*BranchDetails
 
-func (list BranchList) Len() int      { return len(list) }
-func (list BranchList) Swap(i, j int) { list[i], list[j] = list[j], list[i] }
+func (list BranchList) Len() int           { return len(list) }
+func (list BranchList) Swap(i, j int)      { list[i], list[j] = list[j], list[i] }
 func (list BranchList) Less(i, j int) bool { return list[i].Ref < list[j].Ref }
 
 type RepoDetails struct {
-	Path               string
-	Repo               repository.Repo
-	RepoHash           string
-	Title              string
-	Subtitle           string
-	Description        string
-	Branches           BranchList
-	AbandonedReviews   []review.Summary
-	ReviewMap          map[string]ReviewIndex
+	Path             string
+	Repo             repository.Repo
+	RepoHash         string
+	Title            string
+	Subtitle         string
+	Description      string
+	Branches         BranchList
+	AbandonedReviews []review.Summary
+	ReviewMap        map[string]ReviewIndex
 }
 
 func (reviewIndex *ReviewIndex) GetBranchTitle(repoDetails *RepoDetails) string {
@@ -90,7 +91,7 @@ func (reviewIndex *ReviewIndex) GetPrevious(repoDetails *RepoDetails) *ReviewInd
 		previousIndex.Index -= 1
 		return &previousIndex
 	} else if reviewIndex.Branch > 0 &&
-	(reviewIndex.Type == OpenReview || reviewIndex.Type == ClosedReview) {
+		(reviewIndex.Type == OpenReview || reviewIndex.Type == ClosedReview) {
 		previousIndex := *reviewIndex
 		previousIndex.Branch -= 1
 		previousIndex.Index = len(previousIndex.GetSummaries(repoDetails)) - 1
@@ -100,12 +101,12 @@ func (reviewIndex *ReviewIndex) GetPrevious(repoDetails *RepoDetails) *ReviewInd
 }
 
 func (reviewIndex *ReviewIndex) GetNext(repoDetails *RepoDetails) *ReviewIndex {
-	if reviewIndex.Index < len(reviewIndex.GetSummaries(repoDetails)) - 1 {
+	if reviewIndex.Index < len(reviewIndex.GetSummaries(repoDetails))-1 {
 		nextIndex := *reviewIndex
 		nextIndex.Index += 1
 		return &nextIndex
-	} else if reviewIndex.Branch < len(repoDetails.Branches) - 1 &&
-	(reviewIndex.Type == OpenReview || reviewIndex.Type == ClosedReview) {
+	} else if reviewIndex.Branch < len(repoDetails.Branches)-1 &&
+		(reviewIndex.Type == OpenReview || reviewIndex.Type == ClosedReview) {
 		nextIndex := *reviewIndex
 		nextIndex.Branch += 1
 		nextIndex.Index = 0
@@ -115,6 +116,7 @@ func (reviewIndex *ReviewIndex) GetNext(repoDetails *RepoDetails) *ReviewIndex {
 }
 
 var repoDescriptionRe = regexp.MustCompile(`(# (.*)\n)?(## (.*)\n)?((?s).*)`)
+
 const descriptionPath = "README.md"
 
 // Parses the repo description format, a markdown with optional `# Title` and
@@ -202,10 +204,10 @@ func (repoDetails *RepoDetails) Update() error {
 		slices.Reverse(openReviews[branch.Ref])
 		slices.Reverse(closedReviews[branch.Ref])
 
-		branch.OpenReviewCount   = len(openReviews[branch.Ref])
-		branch.OpenReviews       = openReviews[branch.Ref]
+		branch.OpenReviewCount = len(openReviews[branch.Ref])
+		branch.OpenReviews = openReviews[branch.Ref]
 		branch.ClosedReviewCount = len(closedReviews[branch.Ref])
-		branch.ClosedReviews     = closedReviews[branch.Ref]
+		branch.ClosedReviews = closedReviews[branch.Ref]
 
 		branches = append(branches, branch)
 	}
@@ -214,31 +216,31 @@ func (repoDetails *RepoDetails) Update() error {
 	reviewMap := make(map[string]ReviewIndex)
 	for index, abandoned := range abandonedReviews {
 		reviewMap[abandoned.Revision] = ReviewIndex{
-			Type: AbandonedReview,
+			Type:  AbandonedReview,
 			Index: index,
 		}
 	}
 	for branchIndex, branch := range branches {
 		for reviewIndex, review := range branch.OpenReviews {
-			reviewMap[review.Revision] = ReviewIndex {
-				Type: OpenReview,
+			reviewMap[review.Revision] = ReviewIndex{
+				Type:   OpenReview,
 				Branch: branchIndex,
-				Index: reviewIndex,
+				Index:  reviewIndex,
 			}
 		}
 		for reviewIndex, review := range branch.ClosedReviews {
-			reviewMap[review.Revision] = ReviewIndex {
-				Type: OpenReview,
+			reviewMap[review.Revision] = ReviewIndex{
+				Type:   OpenReview,
 				Branch: branchIndex,
-				Index: reviewIndex,
+				Index:  reviewIndex,
 			}
 		}
 	}
 
-	repoDetails.Branches         = branches
+	repoDetails.Branches = branches
 	repoDetails.AbandonedReviews = abandonedReviews
-	repoDetails.RepoHash         = stateHash
-	repoDetails.ReviewMap        = reviewMap
+	repoDetails.RepoHash = stateHash
+	repoDetails.ReviewMap = reviewMap
 
 	return nil
 }

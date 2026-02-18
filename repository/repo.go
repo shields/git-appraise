@@ -149,10 +149,14 @@ const (
 
 func (op DiffOp) String() string {
 	switch op {
-	case OpContext: return " ";
-	case OpDelete: return "-";
-	case OpAdd: return "+";
-	default: return "";
+	case OpContext:
+		return " "
+	case OpDelete:
+		return "-"
+	case OpAdd:
+		return "+"
+	default:
+		return ""
 	}
 }
 

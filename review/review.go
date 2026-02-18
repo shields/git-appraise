@@ -352,7 +352,7 @@ func (r *Summary) IsOpen() bool {
 }
 
 // Verify returns whether or not a summary's comments are a) signed, and b)
-/// that those signatures are verifiable.
+// / that those signatures are verifiable.
 func (r *Summary) Verify() error {
 	err := gpg.Verify(&r.Request)
 	if err != nil {
@@ -685,7 +685,7 @@ func (r *Review) GetDiff(diffArgs ...string) (string, error) {
 	if err != nil {
 		return headCommit, err
 	}
-  return r.Repo.Diff1(headCommit, diffArgs...)
+	return r.Repo.Diff1(headCommit, diffArgs...)
 }
 
 // AddComment adds the given comment to the review.

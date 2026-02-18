@@ -26,7 +26,7 @@ func webGenerateStatic(repoDetails *web.RepoDetails) error {
 	if err := repoDetails.Update(); err != nil {
 		return err
 	}
-	if err := os.Mkdir(*outputDir, os.ModeDir | 0755); err != nil {
+	if err := os.Mkdir(*outputDir, os.ModeDir|0755); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			// Nothing to do
 		} else {
@@ -88,14 +88,14 @@ func webServe(repoDetails *web.RepoDetails) error {
 	var paths web.ServePaths
 
 	stylesheet, _, _ := strings.Cut(paths.Css(), "?")
-	repo, _, _       := strings.Cut(paths.Repo(), "?")
-	branch, _, _     := strings.Cut(paths.Branch(0), "?")
-	review, _, _     := strings.Cut(paths.Review(""), "?")
+	repo, _, _ := strings.Cut(paths.Repo(), "?")
+	branch, _, _ := strings.Cut(paths.Branch(0), "?")
+	review, _, _ := strings.Cut(paths.Review(""), "?")
 
-	http.HandleFunc("/" + stylesheet, web.ServeStyleSheet)
-	http.HandleFunc("/" + repo, repoDetails.ServeRepoTemplate)
-	http.HandleFunc("/" + branch, repoDetails.ServeBranchTemplate)
-	http.HandleFunc("/" + review, repoDetails.ServeReviewTemplate)
+	http.HandleFunc("/"+stylesheet, web.ServeStyleSheet)
+	http.HandleFunc("/"+repo, repoDetails.ServeRepoTemplate)
+	http.HandleFunc("/"+branch, repoDetails.ServeBranchTemplate)
+	http.HandleFunc("/"+review, repoDetails.ServeReviewTemplate)
 	http.HandleFunc("/", repoDetails.ServeEntryPointRedirect)
 
 	return http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)

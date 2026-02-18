@@ -5,7 +5,7 @@ import "strings"
 // Reflows the text `in` with `prefix` before each line, and each line having
 // maximum `width` characters (not including `prefix`). Two newlines indicate a
 // new paragraph
-func Reflow (in, prefix string, width int) string {
+func Reflow(in, prefix string, width int) string {
 	line := strings.Builder{}
 	wordStart := -1
 	wordEnd := 0
@@ -21,8 +21,8 @@ func Reflow (in, prefix string, width int) string {
 	state := normal
 
 	addWord := func() {
-		wordLen := wordEnd - wordStart // excluding current space
-		wordFits := column + wordLen + 1 < maxCol // including separating space
+		wordLen := wordEnd - wordStart        // excluding current space
+		wordFits := column+wordLen+1 < maxCol // including separating space
 		if wordStart >= 0 {
 			if column == 0 || wordFits {
 				if column == 0 {

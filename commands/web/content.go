@@ -60,9 +60,9 @@ type Paths interface {
 	Review(review string) string
 }
 
-type ServePaths struct {}
+type ServePaths struct{}
 
-func (ServePaths) Css() string { return "stylesheet.css" }
+func (ServePaths) Css() string  { return "stylesheet.css" }
 func (ServePaths) Repo() string { return "repo.html" }
 func (ServePaths) Branch(branch uint64) string {
 	return fmt.Sprintf("branch.html?branch=%d", branch)
@@ -71,9 +71,9 @@ func (ServePaths) Review(review string) string {
 	return fmt.Sprintf("review.html?review=%s", review)
 }
 
-type StaticPaths struct {}
+type StaticPaths struct{}
 
-func (StaticPaths) Css() string { return "stylesheet.css" }
+func (StaticPaths) Css() string  { return "stylesheet.css" }
 func (StaticPaths) Repo() string { return "index.html" }
 func (StaticPaths) Branch(branch uint64) string {
 	return fmt.Sprintf("branch_%d.html", branch)
@@ -102,15 +102,19 @@ func mdToHTML(md []byte) []byte {
 func ServeTemplate(v interface{}, p Paths, w io.Writer, name string, templ string) error {
 	tmpl := template.New(name)
 	tmpl = tmpl.Funcs(map[string]any{
-		"u64": func(i int) uint64 { return uint64(i) },
-		"addu64": func(a, b uint64) uint64 { return a + b },
-		"startOfHunk": func(a uint64) uint64 { return max(1, a) - 1; },
+		"u64":         func(i int) uint64 { return uint64(i) },
+		"addu64":      func(a, b uint64) uint64 { return a + b },
+		"startOfHunk": func(a uint64) uint64 { return max(1, a) - 1 },
 		"opName": func(op repository.DiffOp) string {
 			switch op {
-			case repository.OpContext: return "context"
-			case repository.OpDelete: return "delete"
-			case repository.OpAdd: return "add"
-			default: return "unknown"
+			case repository.OpContext:
+				return "context"
+			case repository.OpDelete:
+				return "delete"
+			case repository.OpAdd:
+				return "add"
+			default:
+				return "unknown"
 			}
 		},
 		"isLHS": func(op repository.DiffOp) bool {
@@ -120,7 +124,7 @@ func ServeTemplate(v interface{}, p Paths, w io.Writer, name string, templ strin
 			return op == repository.OpContext || op == repository.OpAdd
 		},
 		"mdToHTML": func(s string) template.HTML { return template.HTML(mdToHTML([]byte(s))) },
-		"paths": func() Paths { return p },
+		"paths":    func() Paths { return p },
 	})
 	tmpl, err := tmpl.Parse(templ)
 	if err != nil {
@@ -136,7 +140,7 @@ func ServeTemplate(v interface{}, p Paths, w io.Writer, name string, templ strin
 }
 
 func ServeErrorTemplate(err error, code int, w http.ResponseWriter) {
-		http.Error(w, err.Error(), code)
+	http.Error(w, err.Error(), code)
 }
 
 func ServeStyleSheet(w http.ResponseWriter, r *http.Request) {
@@ -215,9 +219,9 @@ func (repoDetails *RepoDetails) WriteBranchTemplate(branch uint64, p Paths, w io
 		BranchNum     uint64
 		BranchDetails *BranchDetails
 	}
-	args := templateArgs {
-		RepoDetails: repoDetails,
-		BranchNum: branch,
+	args := templateArgs{
+		RepoDetails:   repoDetails,
+		BranchNum:     branch,
 		BranchDetails: repoDetails.Branches[branch],
 	}
 	return ServeTemplate(args, p, w, "branch", branch_html)
@@ -274,7 +278,7 @@ func (repoDetails *RepoDetails) WriteReviewTemplate(reviewRev string, p Paths, w
 	}
 
 	type ReviewNavigation struct {
-		Link string
+		Link  string
 		Title string
 	}
 
@@ -285,7 +289,7 @@ func (repoDetails *RepoDetails) WriteReviewTemplate(reviewRev string, p Paths, w
 		// For previous, we always just want to go to the reviews
 		summary := previous.GetSummary(repoDetails)
 		previousReview = &ReviewNavigation{
-			Link: p.Review(summary.Revision),
+			Link:  p.Review(summary.Revision),
 			Title: summary.Request.Description,
 		}
 	}
@@ -294,13 +298,13 @@ func (repoDetails *RepoDetails) WriteReviewTemplate(reviewRev string, p Paths, w
 		// branch
 		if next.Branch != reviewIndex.Branch {
 			nextReview = &ReviewNavigation{
-				Link: p.Branch(uint64(next.Branch)),
+				Link:  p.Branch(uint64(next.Branch)),
 				Title: repoDetails.Branches[next.Branch].Title,
 			}
 		} else {
 			summary := next.GetSummary(repoDetails)
 			nextReview = &ReviewNavigation{
-				Link: p.Review(summary.Revision),
+				Link:  p.Review(summary.Revision),
 				Title: summary.Request.Description,
 			}
 		}
@@ -311,32 +315,32 @@ func (repoDetails *RepoDetails) WriteReviewTemplate(reviewRev string, p Paths, w
 	output.SeparateComments(reviewDetails.Summary.Comments, commitThreads, lineThreads)
 
 	type templateArgs struct {
-		RepoDetails *RepoDetails
-		BranchNum uint64
-		BranchTitle string
-		CommitHash string
+		RepoDetails   *RepoDetails
+		BranchNum     uint64
+		BranchTitle   string
+		CommitHash    string
 		CommitDetails *repository.CommitDetails
-		CommitLines []string
+		CommitLines   []string
 		CommitThreads map[uint32][]review.CommentThread
 		ReviewDetails *review.Review
-		LineThreads map[string]map[uint32][]review.CommentThread
-		Diffs []repository.FileDiff
-		Previous *ReviewNavigation
-		Next *ReviewNavigation
+		LineThreads   map[string]map[uint32][]review.CommentThread
+		Diffs         []repository.FileDiff
+		Previous      *ReviewNavigation
+		Next          *ReviewNavigation
 	}
 	args := templateArgs{
-		RepoDetails: repoDetails,
-		BranchNum: uint64(reviewIndex.Branch),
-		BranchTitle: reviewIndex.GetBranchTitle(repoDetails),
-		CommitHash: commit,
+		RepoDetails:   repoDetails,
+		BranchNum:     uint64(reviewIndex.Branch),
+		BranchTitle:   reviewIndex.GetBranchTitle(repoDetails),
+		CommitHash:    commit,
 		CommitDetails: commitDetails,
-		CommitLines: strings.Split(commitMessage, "\n"),
+		CommitLines:   strings.Split(commitMessage, "\n"),
 		CommitThreads: commitThreads,
 		ReviewDetails: reviewDetails,
-		LineThreads: lineThreads,
-		Diffs: diffs,
-		Previous: previousReview,
-		Next: nextReview,
+		LineThreads:   lineThreads,
+		Diffs:         diffs,
+		Previous:      previousReview,
+		Next:          nextReview,
 	}
 
 	return ServeTemplate(args, p, w, "review", review_html)

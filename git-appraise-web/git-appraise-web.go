@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"github.com/gorilla/websocket"
 	"msrl.dev/git-appraise/commands/web"
 	"msrl.dev/git-appraise/repository"
-	"github.com/gorilla/websocket"
 )
 
 var port = flag.Uint("port", 0, "Web server port.")
@@ -25,9 +25,9 @@ var upgrader = websocket.Upgrader{}
 //go:embed repos.html
 var repos_html string
 
-type ServeMultiPaths struct {}
+type ServeMultiPaths struct{}
 
-func (ServeMultiPaths) Css() string { return "/stylesheet.css" }
+func (ServeMultiPaths) Css() string  { return "/stylesheet.css" }
 func (ServeMultiPaths) Repo() string { return "repo.html" }
 func (ServeMultiPaths) Branch(branch uint64) string {
 	return fmt.Sprintf("branch.html?branch=%d", branch)
@@ -99,7 +99,7 @@ func (repos *Repos) ServeRepoTemplate(w http.ResponseWriter, r *http.Request) {
 	if repoDetails, found := repos.Load()[repo]; found {
 		repoDetails.ServeRepoTemplateWith(ServeMultiPaths{}, w, r)
 	} else {
-		http.Error(w, "Repository " + repo + " not found!", http.StatusNotFound)
+		http.Error(w, "Repository "+repo+" not found!", http.StatusNotFound)
 	}
 }
 
@@ -108,7 +108,7 @@ func (repos *Repos) ServeBranchTemplate(w http.ResponseWriter, r *http.Request) 
 	if repoDetails, found := repos.Load()[repo]; found {
 		repoDetails.ServeBranchTemplateWith(ServeMultiPaths{}, w, r)
 	} else {
-		http.Error(w, "Repository " + repo + " not found!", http.StatusNotFound)
+		http.Error(w, "Repository "+repo+" not found!", http.StatusNotFound)
 	}
 }
 
@@ -117,7 +117,7 @@ func (repos *Repos) ServeReviewTemplate(w http.ResponseWriter, r *http.Request) 
 	if repoDetails, found := repos.Load()[repo]; found {
 		repoDetails.ServeReviewTemplateWith(ServeMultiPaths{}, w, r)
 	} else {
-		http.Error(w, "Repository " + repo + " not found!", http.StatusNotFound)
+		http.Error(w, "Repository "+repo+" not found!", http.StatusNotFound)
 	}
 }
 
@@ -179,15 +179,15 @@ func webServe() {
 	}()
 
 	stylesheet, _, _ := strings.Cut(paths.Css(), "?")
-	repo, _, _       := strings.Cut(paths.Repo(), "?")
-	branch, _, _     := strings.Cut(paths.Branch(0), "?")
-	review, _, _     := strings.Cut(paths.Review(""), "?")
+	repo, _, _ := strings.Cut(paths.Repo(), "?")
+	branch, _, _ := strings.Cut(paths.Branch(0), "?")
+	review, _, _ := strings.Cut(paths.Review(""), "?")
 
 	http.HandleFunc("/repos.html", repos.ServeReposTemplate)
 	http.HandleFunc(stylesheet, repos.ServeStyleSheet)
-	http.HandleFunc("/{repo}/" + repo, repos.ServeRepoTemplate)
-	http.HandleFunc("/{repo}/" + branch, repos.ServeBranchTemplate)
-	http.HandleFunc("/{repo}/" + review, repos.ServeReviewTemplate)
+	http.HandleFunc("/{repo}/"+repo, repos.ServeRepoTemplate)
+	http.HandleFunc("/{repo}/"+branch, repos.ServeBranchTemplate)
+	http.HandleFunc("/{repo}/"+review, repos.ServeReviewTemplate)
 	http.HandleFunc("/", repos.ServeEntryPointRedirect)
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); err != nil {
