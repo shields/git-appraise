@@ -26,12 +26,15 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
-	"msrl.dev/git-appraise/commands"
-	"msrl.dev/git-appraise/repository"
+	"io"
 	"os"
 	"sort"
 	"strings"
+
+	"msrl.dev/git-appraise/commands"
+	"msrl.dev/git-appraise/repository"
 )
 
 const usageMessageTemplate = `Usage: %s <command>
@@ -43,33 +46,52 @@ For individual command usage, run:
   %s help <command>
 `
 
-func usage() {
-	command := os.Args[0]
+func printUsage(w io.Writer, arg0 string) {
 	var subcommands []string
 	for subcommand := range commands.CommandMap {
 		subcommands = append(subcommands, subcommand)
 	}
 	sort.Strings(subcommands)
-	fmt.Printf(usageMessageTemplate, command, strings.Join(subcommands, "\n  "), command)
+	fmt.Fprintf(w, usageMessageTemplate, arg0, strings.Join(subcommands, "\n  "), arg0)
 }
 
-func help() {
-	if len(os.Args) < 3 {
-		usage()
+func printHelp(w io.Writer, args []string) {
+	if len(args) < 3 {
+		printUsage(w, args[0])
 		return
 	}
-	subcommand, ok := commands.CommandMap[os.Args[2]]
+	subcommand, ok := commands.CommandMap[args[2]]
 	if !ok {
-		fmt.Printf("Unknown command %q\n", os.Args[2])
-		usage()
+		fmt.Fprintf(w, "Unknown command %q\n", args[2])
+		printUsage(w, args[0])
 		return
 	}
-	subcommand.Usage(os.Args[0])
+	subcommand.Usage(args[0])
+}
+
+func run(w io.Writer, args []string, cwd string) error {
+	repo, err := repository.NewGitRepo(cwd)
+	if err != nil {
+		return fmt.Errorf("%s must be run from within a git repo", args[0])
+	}
+	if len(args) < 2 {
+		subcommand, ok := commands.CommandMap["list"]
+		if !ok {
+			return errors.New("unable to list reviews")
+		}
+		return subcommand.Run(repo, []string{})
+	}
+	subcommand, ok := commands.CommandMap[args[1]]
+	if !ok {
+		printUsage(w, args[0])
+		return fmt.Errorf("unknown command: %q", args[1])
+	}
+	return subcommand.Run(repo, args[2:])
 }
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "help" {
-		help()
+		printHelp(os.Stdout, os.Args)
 		return
 	}
 	cwd, err := os.Getwd()
@@ -77,28 +99,8 @@ func main() {
 		fmt.Printf("Unable to get the current working directory: %q\n", err)
 		return
 	}
-	repo, err := repository.NewGitRepo(cwd)
-	if err != nil {
-		fmt.Printf("%s must be run from within a git repo.\n", os.Args[0])
-		return
-	}
-	if len(os.Args) < 2 {
-		subcommand, ok := commands.CommandMap["list"]
-		if !ok {
-			fmt.Printf("Unable to list reviews")
-			return
-		}
-		subcommand.Run(repo, []string{})
-		return
-	}
-	subcommand, ok := commands.CommandMap[os.Args[1]]
-	if !ok {
-		fmt.Printf("Unknown command: %q\n", os.Args[1])
-		usage()
-		return
-	}
-	if err := subcommand.Run(repo, os.Args[2:]); err != nil {
-		fmt.Println(err.Error())
+	if err := run(os.Stdout, os.Args, cwd); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 }
