@@ -143,12 +143,11 @@ func showThread(repo repository.Repo, thread review.CommentThread, indent string
 			firstLine := comment.Location.Range.StartLine
 			lastLine := comment.Location.Range.EndLine
 
-			if firstLine == 0 {
-				firstLine = 1
-			}
-
 			if lastLine == 0 {
 				lastLine = firstLine
+			}
+			if lastLine > uint32(len(lines)) {
+				lastLine = uint32(len(lines))
 			}
 
 			if lastLine == firstLine {
@@ -185,8 +184,7 @@ func showSubThread(repo repository.Repo, thread review.CommentThread, indent str
 	fmt.Println(indentedSummary)
 	fmt.Println(indentedDescription)
 	for _, child := range thread.Children {
-		err := showSubThread(repo, child, indent)
-		if err != nil {
+		if err := showSubThread(repo, child, indent); err != nil {
 			return err
 		}
 	}
