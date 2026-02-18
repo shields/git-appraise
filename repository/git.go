@@ -164,12 +164,6 @@ func (repo *GitRepo) GetUserEmail() (string, error) {
 	return repo.runGitCommand("config", "user.email")
 }
 
-// GetUserSigningKey returns the key id the user has configured for
-// sigining git artifacts.
-func (repo *GitRepo) GetUserSigningKey() (string, error) {
-	return repo.runGitCommand("config", "user.signingKey")
-}
-
 // GetCoreEditor returns the name of the editor that the user has used to configure git.
 func (repo *GitRepo) GetCoreEditor() (string, error) {
 	return repo.runGitCommand("var", "GIT_EDITOR")
@@ -549,39 +543,9 @@ func (repo *GitRepo) MergeRef(ref string, fastForward bool, messages ...string) 
 	return repo.runGitCommandInline(args...)
 }
 
-// MergeAndSignRef merges the given ref into the current one and signs the
-// merge.
-//
-// The ref argument is the ref to merge, and fastForward indicates that the
-// current ref should only move forward, as opposed to creating a bubble merge.
-// The messages argument(s) provide text that should be included in the default
-// merge commit message (separated by blank lines).
-func (repo *GitRepo) MergeAndSignRef(ref string, fastForward bool,
-	messages ...string) error {
-
-	args := []string{"merge"}
-	if fastForward {
-		args = append(args, "--ff", "--ff-only", "-S")
-	} else {
-		args = append(args, "--no-ff", "-S")
-	}
-	if len(messages) > 0 {
-		commitMessage := strings.Join(messages, "\n\n")
-		args = append(args, "-e", "-m", commitMessage)
-	}
-	args = append(args, ref)
-	return repo.runGitCommandInline(args...)
-}
-
 // RebaseRef rebases the current ref onto the given one.
 func (repo *GitRepo) RebaseRef(ref string) error {
 	return repo.runGitCommandInline("rebase", "-i", ref)
-}
-
-// RebaseAndSignRef rebases the current ref onto the given one and signs the
-// result.
-func (repo *GitRepo) RebaseAndSignRef(ref string) error {
-	return repo.runGitCommandInline("rebase", "-S", "-i", ref)
 }
 
 // ListCommits returns the list of commits reachable from the given ref.

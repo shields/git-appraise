@@ -26,7 +26,6 @@ import (
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review"
 	"msrl.dev/git-appraise/review/comment"
-	"msrl.dev/git-appraise/review/gpg"
 )
 
 var commentFlagSet = flag.NewFlagSet("comment", flag.ExitOnError)
@@ -40,7 +39,6 @@ var (
 	commentDetached    = commentFlagSet.Bool("d", false, "Do not attach the comment to a review")
 	commentLgtm        = commentFlagSet.Bool("lgtm", false, "'Looks Good To Me'. Set this to express your approval. This cannot be combined with nmw")
 	commentNmw         = commentFlagSet.Bool("nmw", false, "'Needs More Work'. Set this to express your disapproval. This cannot be combined with lgtm")
-	commentSign        = commentFlagSet.Bool("S", false, "Sign the contents of the comment")
 	commentDate        = commentFlagSet.String("date", "", "comment date")
 )
 
@@ -129,16 +127,6 @@ func buildCommentFromFlags(repo repository.Repo, commentedUponCommit string) (*c
 		c.Resolved = &resolved
 	}
 
-	if *commentSign {
-		key, err := repo.GetUserSigningKey()
-		if err != nil {
-			return nil, err
-		}
-		err = gpg.Sign(key, &c)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return &c, nil
 }
 

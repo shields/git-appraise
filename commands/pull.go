@@ -22,14 +22,9 @@ import (
 	"fmt"
 
 	"msrl.dev/git-appraise/repository"
-	"msrl.dev/git-appraise/review"
 )
 
-var (
-	pullFlagSet = flag.NewFlagSet("pull", flag.ExitOnError)
-	pullVerify  = pullFlagSet.Bool("verify-signatures", false,
-		"verify the signatures of pulled reviews")
-)
+var pullFlagSet = flag.NewFlagSet("pull", flag.ExitOnError)
 
 // pull updates the local git-notes used for reviews with those from a remote
 // repo.
@@ -46,40 +41,7 @@ func pull(repo repository.Repo, args []string) error {
 	if len(pullArgs) == 1 {
 		remote = pullArgs[0]
 	}
-	// This is the easy case. We're not checking signatures so just go the
-	// normal route.
-	if !*pullVerify {
-		return repo.PullNotesAndArchive(remote, notesRefPattern,
-			archiveRefPattern)
-	}
-
-	// Otherwise, we collect the fetched reviewed revisions (their hashes), get
-	// their reviews, and then one by one, verify them. If we make it through
-	// the set, _then_ we merge the remote reference into the local branch.
-	revisions, err := repo.FetchAndReturnNewReviewHashes(remote,
-		notesRefPattern, archiveRefPattern)
-	if err != nil {
-		return err
-	}
-	for _, revision := range revisions {
-		rvw, err := review.GetSummaryViaRefs(repo,
-			"refs/notes/"+remote+"/devtools/reviews",
-			"refs/notes/"+remote+"/devtools/discuss", revision)
-		if err != nil {
-			return err
-		}
-		err = rvw.Verify()
-		if err != nil {
-			return err
-		}
-		fmt.Println("verified review:", revision)
-	}
-
-	err = repo.MergeNotes(remote, notesRefPattern)
-	if err != nil {
-		return err
-	}
-	return repo.MergeArchives(remote, archiveRefPattern)
+	return repo.PullNotesAndArchive(remote, notesRefPattern, archiveRefPattern)
 }
 
 var pullCmd = &Command{

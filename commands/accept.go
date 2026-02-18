@@ -26,7 +26,6 @@ import (
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review"
 	"msrl.dev/git-appraise/review/comment"
-	"msrl.dev/git-appraise/review/gpg"
 )
 
 var acceptFlagSet = flag.NewFlagSet("accept", flag.ExitOnError)
@@ -35,8 +34,6 @@ var (
 	acceptMessageFile = acceptFlagSet.String("F", "", "Take the comment from the given file. Use - to read the message from the standard input")
 	acceptMessage     = acceptFlagSet.String("m", "", "Message to attach to the review")
 	acceptDate        = acceptFlagSet.String("date", "", "Date to use for the review")
-	acceptSign        = acceptFlagSet.Bool("S", false,
-		"sign the contents of the acceptance")
 )
 
 // acceptReview adds an LGTM comment to the current code review.
@@ -99,16 +96,6 @@ func acceptReview(repo repository.Repo, args []string) error {
 		c.Timestamp = timestamp
 	}
 
-	if *acceptSign {
-		key, err := repo.GetUserSigningKey()
-		if err != nil {
-			return err
-		}
-		err = gpg.Sign(key, &c)
-		if err != nil {
-			return err
-		}
-	}
 	return r.AddComment(c)
 }
 

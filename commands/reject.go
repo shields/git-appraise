@@ -25,7 +25,6 @@ import (
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review"
 	"msrl.dev/git-appraise/review/comment"
-	"msrl.dev/git-appraise/review/gpg"
 )
 
 var rejectFlagSet = flag.NewFlagSet("reject", flag.ExitOnError)
@@ -33,9 +32,6 @@ var rejectFlagSet = flag.NewFlagSet("reject", flag.ExitOnError)
 var (
 	rejectMessageFile = rejectFlagSet.String("F", "", "Take the comment from the given file. Use - to read the message from the standard input")
 	rejectMessage     = rejectFlagSet.String("m", "", "Message to attach to the review")
-
-	rejectSign = rejectFlagSet.Bool("S", false,
-		"Sign the contents of the rejection")
 )
 
 // rejectReview adds an NMW comment to the current code review.
@@ -94,16 +90,6 @@ func rejectReview(repo repository.Repo, args []string) error {
 	c := comment.New(userEmail, *rejectMessage)
 	c.Location = &location
 	c.Resolved = &resolved
-	if *rejectSign {
-		key, err := repo.GetUserSigningKey()
-		if err != nil {
-			return err
-		}
-		err = gpg.Sign(key, &c)
-		if err != nil {
-			return err
-		}
-	}
 	return r.AddComment(c)
 }
 

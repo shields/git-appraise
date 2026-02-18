@@ -25,7 +25,6 @@ import (
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review"
 	"msrl.dev/git-appraise/review/comment"
-	"msrl.dev/git-appraise/review/gpg"
 	"msrl.dev/git-appraise/review/request"
 )
 
@@ -34,9 +33,6 @@ var abandonFlagSet = flag.NewFlagSet("abandon", flag.ExitOnError)
 var (
 	abandonMessageFile = abandonFlagSet.String("F", "", "Take the comment from the given file. Use - to read the message from the standard input")
 	abandonMessage     = abandonFlagSet.String("m", "", "Message to attach to the review")
-
-	abandonSign = abandonFlagSet.Bool("S", false,
-		"Sign the contents of the abandonment")
 )
 
 // abandonReview adds an NMW comment to the current code review.
@@ -92,32 +88,13 @@ func abandonReview(repo repository.Repo, args []string) error {
 	c.Location = &location
 	c.Resolved = &resolved
 
-	var key string
-	if *abandonSign {
-		key, err := repo.GetUserSigningKey()
-		if err != nil {
-			return err
-		}
-		err = gpg.Sign(key, &c)
-		if err != nil {
-			return err
-		}
-	}
-
 	err = r.AddComment(c)
 	if err != nil {
 		return err
 	}
 
-	// Empty target ref indicates that request was abandoned
+	// Empty target ref indicates the request was abandoned.
 	r.Request.TargetRef = ""
-	// (re)sign the request after clearing out `TargetRef'.
-	if *abandonSign {
-		err = gpg.Sign(key, &r.Request)
-		if err != nil {
-			return err
-		}
-	}
 
 	note, err := r.Request.Write()
 	if err != nil {
