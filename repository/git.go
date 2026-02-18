@@ -77,7 +77,7 @@ func (repo *GitRepo) runGitCommand(args ...string) (string, error) {
 		if stderr == "" {
 			stderr = "Error running git command: " + strings.Join(args, " ")
 		}
-		err = fmt.Errorf(stderr)
+		err = fmt.Errorf("%s", stderr)
 	}
 	return stdout, err
 }
@@ -92,7 +92,7 @@ func (repo *GitRepo) runGitCommandWithEnv(env []string, args ...string) (string,
 		if stderrStr == "" {
 			stderrStr = "Error running git command: " + strings.Join(args, " ")
 		}
-		err = fmt.Errorf(stderrStr)
+		err = fmt.Errorf("%s", stderrStr)
 	}
 	return strings.TrimSpace(stdout.String()), err
 }
