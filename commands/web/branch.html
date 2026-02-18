@@ -33,7 +33,7 @@
 			<h1>Closed Reviews ({{- .BranchDetails.ClosedReviewCount -}})</h1>
 			<ol class="closed">
 				{{- range .BranchDetails.ClosedReviews -}}
-					<a href="{{- paths.Review $.BranchNum .Revision -}}">
+					<a href="{{- paths.Review .Revision -}}">
 						<li class="closed review">
 							<span class="closed review review-description">{{- .Request.Description -}}</span>
 							<span class="closed review review-comments">{{- len .Comments -}}</span>
