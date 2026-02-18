@@ -60,8 +60,8 @@ func showDetachedComments(repo repository.Repo, args []string) error {
 
 // showReview prints the current code review.
 func showReview(repo repository.Repo, args []string) error {
-	if *showDiffOptions != "" && !*showDiffOutput {
-		return errors.New("The --diff-opts flag can only be used if the --diff flag is set.")
+	if *showDiffOptions != "" && !*showDiffOutput && !*showInlineOutput {
+		return errors.New("The --diff-opts flag can only be used with the --diff or --inline flag.")
 	}
 
 	var r *review.Review

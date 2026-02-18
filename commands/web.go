@@ -79,8 +79,9 @@ func webGenerateStatic(repoDetails *web.RepoDetails) error {
 	return nil
 }
 
-func webServe(repoDetails *web.RepoDetails) error {
-	http.HandleFunc("/_ah/health",
+func webSetupHandlers(repoDetails *web.RepoDetails) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/_ah/health",
 		func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "ok")
 		})
@@ -92,13 +93,18 @@ func webServe(repoDetails *web.RepoDetails) error {
 	branch, _, _ := strings.Cut(paths.Branch(0), "?")
 	review, _, _ := strings.Cut(paths.Review(""), "?")
 
-	http.HandleFunc("/"+stylesheet, web.ServeStyleSheet)
-	http.HandleFunc("/"+repo, repoDetails.ServeRepoTemplate)
-	http.HandleFunc("/"+branch, repoDetails.ServeBranchTemplate)
-	http.HandleFunc("/"+review, repoDetails.ServeReviewTemplate)
-	http.HandleFunc("/", repoDetails.ServeEntryPointRedirect)
+	mux.HandleFunc("/"+stylesheet, web.ServeStyleSheet)
+	mux.HandleFunc("/"+repo, repoDetails.ServeRepoTemplate)
+	mux.HandleFunc("/"+branch, repoDetails.ServeBranchTemplate)
+	mux.HandleFunc("/"+review, repoDetails.ServeReviewTemplate)
+	mux.HandleFunc("/", repoDetails.ServeEntryPointRedirect)
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
+	return mux
+}
+
+func webServe(repoDetails *web.RepoDetails) error {
+	mux := webSetupHandlers(repoDetails)
+	return http.ListenAndServe(fmt.Sprintf(":%d", *port), mux)
 }
 
 func usage(arg0 string) {
