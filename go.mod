@@ -11,7 +11,6 @@ require (
 	github.com/bluekeyes/go-gitdiff v0.8.0
 	github.com/gomarkdown/markdown v0.0.0-20240730141124-034f12af3bf6
 	github.com/gorilla/css v1.0.1 // indirect
-	github.com/gorilla/websocket v1.5.3
 	github.com/microcosm-cc/bluemonday v1.0.27
 	golang.org/x/net v0.26.0 // indirect
 )
