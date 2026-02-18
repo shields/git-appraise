@@ -230,7 +230,7 @@ func (repoDetails *RepoDetails) Update() error {
 		}
 		for reviewIndex, review := range branch.ClosedReviews {
 			reviewMap[review.Revision] = ReviewIndex{
-				Type:   OpenReview,
+				Type:   ClosedReview,
 				Branch: branchIndex,
 				Index:  reviewIndex,
 			}
