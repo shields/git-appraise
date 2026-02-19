@@ -23,7 +23,8 @@ import (
 	"io"
 	"os"
 
-	exec "golang.org/x/sys/execabs"
+	"os/exec"
+
 	"msrl.dev/git-appraise/repository"
 )
 

@@ -3,9 +3,9 @@ package repository
 import (
 	"bytes"
 	"fmt"
-	exec "golang.org/x/sys/execabs"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"

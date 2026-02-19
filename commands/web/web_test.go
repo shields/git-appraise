@@ -756,7 +756,7 @@ type errWriter struct{}
 
 func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write error") }
 func (errWriter) Header() http.Header       { return http.Header{} }
-func (errWriter) WriteHeader(int)            {}
+func (errWriter) WriteHeader(int)           {}
 
 func TestServeTemplateWriteError(t *testing.T) {
 	data := struct{ Name string }{"test"}

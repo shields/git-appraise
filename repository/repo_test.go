@@ -805,7 +805,7 @@ func TestMockRepoListCommitsBetweenNotBlocked(t *testing.T) {
 // failingTreeChild is a TreeChild whose Store always returns an error.
 type failingTreeChild struct{}
 
-func (f *failingTreeChild) Type() string                       { return "blob" }
+func (f *failingTreeChild) Type() string                 { return "blob" }
 func (f *failingTreeChild) Store(_ Repo) (string, error) { return "", fmt.Errorf("store failed") }
 
 func TestMockRepoStoreTreeChildStoreError(t *testing.T) {
