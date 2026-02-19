@@ -126,6 +126,14 @@ func (r errEditorRepo) GetCoreEditor() (string, error) {
 	return "", fmt.Errorf("no editor configured")
 }
 
+// noopEditorRepo wraps a Repo and returns "true" as the editor so that
+// LaunchEditor exits immediately instead of launching an interactive editor.
+type noopEditorRepo struct {
+	repository.Repo
+}
+
+func (r noopEditorRepo) GetCoreEditor() (string, error) { return "true", nil }
+
 type uncommittedRepo struct {
 	repository.Repo
 }
@@ -2576,11 +2584,10 @@ func TestWebSetupHandlersBranch(t *testing.T) {
 func TestRejectReviewNoMessage(t *testing.T) {
 	resetRejectFlags()
 	defer resetRejectFlags()
-	repo := repository.NewMockRepoForTest()
-	// No message, no message file - triggers editor path which fails with mock
+	repo := noopEditorRepo{repository.NewMockRepoForTest()}
+	// "true" exits immediately without creating the temp file, so
+	// LaunchEditor returns an error after exercising the editor path.
 	if err := rejectReview(repo, []string{repository.TestCommitG}); err != nil {
-		// With mock repo, editor is "vi" which may or may not work.
-		// The point is to exercise the code path.
 		t.Logf("editor path: %v", err)
 	}
 }
@@ -2590,7 +2597,7 @@ func TestRejectReviewNoMessage(t *testing.T) {
 func TestAbandonReviewNoMessage(t *testing.T) {
 	resetAbandonFlags()
 	defer resetAbandonFlags()
-	repo := repository.NewMockRepoForTest()
+	repo := noopEditorRepo{repository.NewMockRepoForTest()}
 	if err := abandonReview(repo, []string{repository.TestCommitG}); err != nil {
 		t.Logf("editor path: %v", err)
 	}
