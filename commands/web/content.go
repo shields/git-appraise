@@ -143,9 +143,12 @@ func ServeErrorTemplate(err error, code int, w http.ResponseWriter) {
 	http.Error(w, err.Error(), code)
 }
 
+// Test seams for template rendering; not safe for t.Parallel().
+var writeStyleSheet = WriteStyleSheet
+
 func ServeStyleSheet(w http.ResponseWriter, r *http.Request) {
 	var writer bytes.Buffer
-	err := WriteStyleSheet(&writer)
+	err := writeStyleSheet(&writer)
 	if err != nil {
 		ServeErrorTemplate(err, http.StatusInternalServerError, w)
 		return
@@ -179,8 +182,12 @@ func (repoDetails *RepoDetails) ServeRepoTemplateWith(p Paths, w http.ResponseWr
 	w.Write(writer.Bytes())
 }
 
+var serveRepoTemplate = func(v any, p Paths, w io.Writer) error {
+	return ServeTemplate(v, p, w, "repo", repo_html)
+}
+
 func (repoDetails *RepoDetails) WriteRepoTemplate(p Paths, w io.Writer) error {
-	return ServeTemplate(repoDetails, p, w, "repo", repo_html)
+	return serveRepoTemplate(repoDetails, p, w)
 }
 
 // Shows reviews for a given branch
@@ -224,7 +231,15 @@ func (repoDetails *RepoDetails) WriteBranchTemplate(branch uint64, p Paths, w io
 		BranchNum:     branch,
 		BranchDetails: repoDetails.Branches[branch],
 	}
-	return ServeTemplate(args, p, w, "branch", branch_html)
+	return serveBranchTemplate(args, p, w)
+}
+
+var serveBranchTemplate = func(v any, p Paths, w io.Writer) error {
+	return ServeTemplate(v, p, w, "branch", branch_html)
+}
+
+var serveReviewTemplate = func(v any, p Paths, w io.Writer) error {
+	return ServeTemplate(v, p, w, "review", review_html)
 }
 
 // Show a review with inline diff
@@ -343,7 +358,7 @@ func (repoDetails *RepoDetails) WriteReviewTemplate(reviewRev string, p Paths, w
 		Next:          nextReview,
 	}
 
-	return ServeTemplate(args, p, w, "review", review_html)
+	return serveReviewTemplate(args, p, w)
 }
 
 // ServeEntryPointRedirect writes the main redirect response to the given writer.
