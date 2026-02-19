@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"msrl.dev/git-appraise/commands"
 )
 
 func setupTestGitRepo(t *testing.T) string {
@@ -57,7 +59,6 @@ func TestPrintHelpNoSubcommand(t *testing.T) {
 }
 
 func TestPrintHelpValidSubcommand(t *testing.T) {
-	// subcommand.Usage writes to os.Stdout directly, so capture it.
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -127,4 +128,132 @@ func TestRunListExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestRunListNotInCommandMap(t *testing.T) {
+	dir := setupTestGitRepo(t)
+	saved := commands.CommandMap["list"]
+	delete(commands.CommandMap, "list")
+	defer func() { commands.CommandMap["list"] = saved }()
+
+	var buf bytes.Buffer
+	err := run(&buf, []string{"git-appraise"}, dir)
+	if err == nil || !strings.Contains(err.Error(), "unable to list reviews") {
+		t.Errorf("expected 'unable to list reviews' error, got %v", err)
+	}
+}
+
+func TestMainHelpPath(t *testing.T) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"git-appraise", "help"}
+	main()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if !strings.Contains(buf.String(), "Usage:") {
+		t.Errorf("expected Usage in output, got %q", buf.String())
+	}
+}
+
+func TestMainHelpWithSubcommand(t *testing.T) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"git-appraise", "help", "list"}
+	main()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if !strings.Contains(buf.String(), "list") {
+		t.Errorf("expected 'list' in output, got %q", buf.String())
+	}
+}
+
+func TestMainSuccessfulRun(t *testing.T) {
+	dir := setupTestGitRepo(t)
+	origArgs := os.Args
+	origDir, _ := os.Getwd()
+	defer func() {
+		os.Args = origArgs
+		os.Chdir(origDir)
+	}()
+
+	os.Chdir(dir)
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"git-appraise"}
+	main()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+}
+
+func TestMainGetwdError(t *testing.T) {
+	origArgs := os.Args
+	origDir, _ := os.Getwd()
+	defer func() {
+		os.Args = origArgs
+		os.Chdir(origDir)
+	}()
+
+	// Create a temp dir, chdir into it, then remove it to make Getwd fail
+	tmpDir := t.TempDir()
+	subDir := tmpDir + "/vanishing"
+	os.Mkdir(subDir, 0755)
+	os.Chdir(subDir)
+	os.RemoveAll(subDir)
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"git-appraise"}
+	main()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if !strings.Contains(buf.String(), "Unable to get the current working directory") {
+		t.Errorf("expected Getwd error message, got %q", buf.String())
+	}
+}
+
+// TestMainRunErrorSubprocess tests the os.Exit(1) path via subprocess.
+func TestMainRunErrorSubprocess(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMainRunErrorHelper$")
+	cmd.Env = append(os.Environ(), "TEST_MAIN_RUN_ERROR=1")
+	cmd.Dir = t.TempDir()
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected non-zero exit code")
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got %T: %v", err, err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.ExitCode())
+	}
+}
+
+func TestMainRunErrorHelper(t *testing.T) {
+	if os.Getenv("TEST_MAIN_RUN_ERROR") != "1" {
+		return
+	}
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+	os.Args = []string{"git-appraise", "list"}
+	main()
 }
