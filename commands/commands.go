@@ -18,8 +18,15 @@ limitations under the License.
 package commands
 
 import (
+	"encoding/json"
+
 	"msrl.dev/git-appraise/repository"
+	"msrl.dev/git-appraise/review/request"
 )
+
+// Test seams; not safe for t.Parallel().
+var jsonMarshalIndent = json.MarshalIndent
+var writeRequest = func(r *request.Request) (repository.Note, error) { return r.Write() }
 
 const notesRefPattern = "refs/notes/devtools/*"
 const archiveRefPattern = "refs/devtools/archives/*"

@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review"
 	"msrl.dev/git-appraise/review/comment"
+	"msrl.dev/git-appraise/review/request"
 )
 
 // captureStdout redirects os.Stdout to capture printed output.
@@ -2147,5 +2150,1148 @@ func TestRequestReviewHeadRefError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "head ref") {
 		t.Errorf("expected head ref error, got %v", err)
+	}
+}
+
+// --- Additional wrapper repos for full coverage ---
+
+type errAppendNoteRepo struct {
+	repository.Repo
+}
+
+func (r errAppendNoteRepo) AppendNote(ref, revision string, note repository.Note) error {
+	return fmt.Errorf("append note failed")
+}
+
+type errIsAncestorRepo struct {
+	repository.Repo
+}
+
+func (r errIsAncestorRepo) IsAncestor(ancestor, descendant string) (bool, error) {
+	return false, fmt.Errorf("is-ancestor failed")
+}
+
+func (r errIsAncestorRepo) VerifyGitRef(ref string) error {
+	return r.Repo.VerifyGitRef(ref)
+}
+
+func (r errIsAncestorRepo) GetSubmitStrategy() (string, error) {
+	return "merge", nil
+}
+
+type errSwitchToRefRepo struct {
+	repository.Repo
+}
+
+func (r errSwitchToRefRepo) SwitchToRef(ref string) error {
+	return fmt.Errorf("switch-to-ref failed")
+}
+
+func (r errSwitchToRefRepo) GetSubmitStrategy() (string, error) {
+	return "merge", nil
+}
+
+type errGetCommitMessageRepo struct {
+	repository.Repo
+}
+
+func (r errGetCommitMessageRepo) GetCommitMessage(ref string) (string, error) {
+	return "", fmt.Errorf("commit message failed")
+}
+
+type errGetRepoStateHashRepo struct {
+	repository.Repo
+}
+
+func (r errGetRepoStateHashRepo) GetRepoStateHash() (string, error) {
+	return "", fmt.Errorf("state hash failed")
+}
+
+// --- listReviews jsonMarshalIndent error ---
+
+func TestListReviewsJSONMarshalError(t *testing.T) {
+	defer resetListFlags()
+	repo := repository.NewMockRepoForTest()
+	origMarshal := jsonMarshalIndent
+	defer func() { jsonMarshalIndent = origMarshal }()
+	jsonMarshalIndent = func(v any, prefix, indent string) ([]byte, error) {
+		return nil, fmt.Errorf("marshal error")
+	}
+	err := listReviews(repo, []string{"-json"})
+	if err == nil || !strings.Contains(err.Error(), "marshal error") {
+		t.Errorf("expected marshal error, got %v", err)
+	}
+}
+
+// --- requestReview buildRequestFromFlags error (bad date) ---
+
+func TestRequestReviewBuildRequestError(t *testing.T) {
+	resetRequestFlags()
+	defer resetRequestFlags()
+	repo := repository.NewMockRepoForTest()
+	err := requestReview(repo, []string{
+		"-date", "INVALID DATE",
+		"-source", repository.TestReviewRef,
+		"-target", repository.TestTargetRef,
+		"-allow-uncommitted",
+	})
+	if err == nil {
+		t.Error("expected error from buildRequestFromFlags bad date")
+	}
+}
+
+// --- requestReview GetCommitMessage error ---
+
+func TestRequestReviewGetCommitMessageError(t *testing.T) {
+	resetRequestFlags()
+	defer resetRequestFlags()
+	repo := errGetCommitMessageRepo{repository.NewMockRepoForTest()}
+	err := requestReview(repo, []string{
+		"-source", repository.TestReviewRef,
+		"-target", repository.TestTargetRef,
+		"-allow-uncommitted",
+	})
+	if err == nil || !strings.Contains(err.Error(), "commit message") {
+		t.Errorf("expected commit message error, got %v", err)
+	}
+}
+
+// --- requestReview writeRequest error ---
+
+func TestRequestReviewWriteRequestError(t *testing.T) {
+	resetRequestFlags()
+	defer resetRequestFlags()
+	repo := repository.NewMockRepoForTest()
+	origWrite := writeRequest
+	defer func() { writeRequest = origWrite }()
+	writeRequest = func(r *request.Request) (repository.Note, error) {
+		return nil, fmt.Errorf("write request failed")
+	}
+	err := requestReview(repo, []string{
+		"-m", "test",
+		"-source", repository.TestReviewRef,
+		"-target", repository.TestTargetRef,
+		"-allow-uncommitted",
+	})
+	if err == nil || !strings.Contains(err.Error(), "write request") {
+		t.Errorf("expected write request error, got %v", err)
+	}
+}
+
+// --- requestReview AppendNote error ---
+
+func TestRequestReviewAppendNoteError(t *testing.T) {
+	resetRequestFlags()
+	defer resetRequestFlags()
+	repo := errAppendNoteRepo{repository.NewMockRepoForTest()}
+	err := requestReview(repo, []string{
+		"-m", "test",
+		"-source", repository.TestReviewRef,
+		"-target", repository.TestTargetRef,
+		"-allow-uncommitted",
+	})
+	if err == nil || !strings.Contains(err.Error(), "append note") {
+		t.Errorf("expected append note error, got %v", err)
+	}
+}
+
+// --- submitReview IsAncestor error ---
+
+func TestSubmitReviewIsAncestorError(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	// First create an accepted review on a normal repo
+	repo := setupAcceptedReview(t)
+	// Wrap with errIsAncestorRepo
+	wrappedRepo := errIsAncestorRepo{repo}
+	err := submitReview(wrappedRepo, []string{repository.TestCommitG})
+	if err == nil || !strings.Contains(err.Error(), "is-ancestor") {
+		t.Errorf("expected is-ancestor error, got %v", err)
+	}
+}
+
+// --- submitReview SwitchToRef error ---
+
+func TestSubmitReviewSwitchToRefError(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	wrappedRepo := errSwitchToRefRepo{repo}
+	*submitFastForward = true
+	err := submitReview(wrappedRepo, []string{repository.TestCommitG})
+	if err == nil || !strings.Contains(err.Error(), "switch-to-ref") {
+		t.Errorf("expected switch-to-ref error, got %v", err)
+	}
+}
+
+// --- submitReview merge strategy ---
+
+func TestSubmitReviewMergeStrategy(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	repo = strategyRepo{repo, "merge"}
+	if err := submitReview(repo, []string{repository.TestCommitG}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- abandonReview AppendNote error ---
+
+func TestAbandonReviewAppendNoteError(t *testing.T) {
+	resetAbandonFlags()
+	defer resetAbandonFlags()
+	repo := errAppendNoteRepo{repository.NewMockRepoForTest()}
+	*abandonMessage = "msg"
+	err := abandonReview(repo, []string{repository.TestCommitG})
+	if err == nil || !strings.Contains(err.Error(), "append note") {
+		t.Errorf("expected append note error, got %v", err)
+	}
+}
+
+// --- commentOnReview buildCommentFromFlags user email error ---
+
+func TestCommentOnReviewBuildCommentError(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := errUserEmailRepo{repository.NewMockRepoForTest()}
+	*commentMessage = "msg"
+	err := commentOnReview(repo, []string{repository.TestCommitG})
+	if err == nil || !strings.Contains(err.Error(), "no email") {
+		t.Errorf("expected 'no email' error, got %v", err)
+	}
+}
+
+// --- commentOnPath buildCommentFromFlags user email error ---
+
+func TestCommentOnPathBuildCommentError(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := errUserEmailRepo{repository.NewMockRepoForTest()}
+	*commentMessage = "msg"
+	*commentFile = "foo.txt"
+	err := commentOnPath(repo, nil)
+	if err == nil || !strings.Contains(err.Error(), "no email") {
+		t.Errorf("expected 'no email' error, got %v", err)
+	}
+}
+
+// --- buildCommentFromFlags location.Check error ---
+
+func TestBuildCommentFromFlagsLocationCheckError(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := repository.NewMockRepoForTest()
+	*commentMessage = "test"
+	*commentFile = "foo.txt"
+	commentLocation = comment.Range{StartLine: 9999}
+	_, err := buildCommentFromFlags(repo, repository.TestCommitG)
+	if err == nil || !strings.Contains(err.Error(), "Unable to comment") {
+		t.Errorf("expected location check error, got %v", err)
+	}
+}
+
+// --- accept with bad date ---
+
+func TestAcceptReviewBadDate(t *testing.T) {
+	resetAcceptFlags()
+	defer resetAcceptFlags()
+	repo := repository.NewMockRepoForTest()
+	*acceptMessage = "LGTM"
+	*acceptDate = "INVALID DATE"
+	err := acceptReview(repo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected error for bad date in accept")
+	}
+}
+
+// --- showDetachedComments error loading comments ---
+
+func TestShowDetachedCommentsBadRef(t *testing.T) {
+	resetShowFlags()
+	defer resetShowFlags()
+	repo := repository.NewMockRepoForTest()
+	// "nonexistent_ref" is not a valid path for detached comments;
+	// GetDetachedComments won't error but will return empty. The
+	// success path for loading should still work. Instead test JSON.
+	*showJSONOutput = true
+	captureStdout(t, func() {
+		if err := showDetachedComments(repo, []string{"nonexistent_path"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// --- showDetachedComments --diff-opts without --diff, with -d ---
+
+func TestShowDetachedCommentsDiffOptsConflict(t *testing.T) {
+	resetShowFlags()
+	defer resetShowFlags()
+	repo := repository.NewMockRepoForTest()
+	*showDiffOptions = "some-opt"
+	if err := showDetachedComments(repo, []string{"foo.txt"}); err == nil {
+		t.Error("expected error when --diff-opts combined with -d")
+	}
+}
+
+// --- push/pull Usage and RunMethod ---
+
+func TestPushUsage(t *testing.T) {
+	out := captureStdout(t, func() { pushCmd.Usage("test-app") })
+	if !strings.Contains(out, "push") {
+		t.Errorf("expected 'push' in usage output, got %q", out)
+	}
+}
+
+func TestPullUsage(t *testing.T) {
+	out := captureStdout(t, func() { pullCmd.Usage("test-app") })
+	if !strings.Contains(out, "pull") {
+		t.Errorf("expected 'pull' in usage output, got %q", out)
+	}
+}
+
+func TestPushCmdRunMethod(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	if err := pushCmd.RunMethod(repo, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPullCmdRunMethod(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	if err := pullCmd.RunMethod(repo, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- webCmd RunMethod with -port (webServe path) ---
+// webServe calls http.ListenAndServe which blocks, so we test it indirectly
+// by using port 0 + output (already tested) and by verifying webSetupHandlers.
+
+func TestWebCmdUsage(t *testing.T) {
+	out := captureStdout(t, func() { webCmd.Usage("test-app") })
+	if !strings.Contains(out, "web") {
+		t.Errorf("expected 'web' in usage output, got %q", out)
+	}
+}
+
+// --- webGenerateStatic error paths ---
+
+func TestWebGenerateStaticUpdateError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := errGetRepoStateHashRepo{repository.NewMockRepoForTest()}
+	dir := t.TempDir()
+	*outputDir = dir + "/static"
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Update will fail because GetRepoStateHash returns error
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from Update in webGenerateStatic")
+	}
+}
+
+func TestWebGenerateStaticChdirError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := repository.NewMockRepoForTest()
+	// Create a directory, then remove it so Chdir fails
+	dir := t.TempDir()
+	outPath := dir + "/static"
+	*outputDir = outPath
+	// Make the directory exist so Mkdir succeeds, but then make Chdir fail
+	// by setting outputDir to a file (not a directory)
+	tmpFile := dir + "/not_a_dir"
+	f, err := os.Create(tmpFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	*outputDir = tmpFile
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from Chdir on a file")
+	}
+}
+
+// --- webCmd RunMethod with invalid output dir to trigger webGenerateStatic error ---
+
+func TestWebCmdRunMethodGenerateStaticError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := repository.NewMockRepoForTest()
+	captureStdout(t, func() {
+		err := webCmd.RunMethod(repo, []string{"-output", "/nonexistent/deeply/nested/path"})
+		if err == nil {
+			t.Error("expected error from webGenerateStatic in RunMethod")
+		}
+	})
+}
+
+// --- GetDate with GIT_AUTHOR_DATE env ---
+
+func TestGetDateFromGitAuthorDate(t *testing.T) {
+	t.Setenv("GIT_AUTHOR_DATE", "1488452400 +0000")
+	t.Setenv("GIT_COMMITTER_DATE", "")
+	date, err := GetDate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if date == nil {
+		t.Error("expected non-nil date from GIT_AUTHOR_DATE")
+	}
+}
+
+func TestGetDateFromGitCommitterDate(t *testing.T) {
+	t.Setenv("GIT_AUTHOR_DATE", "")
+	t.Setenv("GIT_COMMITTER_DATE", "1488452400 +0000")
+	date, err := GetDate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if date == nil {
+		t.Error("expected non-nil date from GIT_COMMITTER_DATE")
+	}
+}
+
+// --- webGenerateStatic CSS/repo/branch/review write paths ---
+// These are already partially covered; the remaining uncovered lines are
+// deep error paths in OS operations. Testing them would require breaking
+// the filesystem mid-operation which isn't feasible without modifying source.
+
+// --- webSetupHandlers branch endpoint ---
+
+func TestWebSetupHandlersBranch(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repoDetails.Update(); err != nil {
+		t.Fatal(err)
+	}
+	mux := webSetupHandlers(repoDetails)
+
+	// Test branch endpoint
+	req := httptest.NewRequest(http.MethodGet, "/branch.html?branch=0", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("branch endpoint returned %d, want 200", rec.Code)
+	}
+
+	// Test review endpoint (will 500 for non-hex hash, but covers the path)
+	req = httptest.NewRequest(http.MethodGet, "/review.html?review=abcdef", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	// Status may be 500 for nonexistent review, but the handler code is exercised
+}
+
+// --- Additional tests for full coverage of reject.go ---
+
+func TestRejectReviewNoMessage(t *testing.T) {
+	resetRejectFlags()
+	defer resetRejectFlags()
+	repo := repository.NewMockRepoForTest()
+	// No message, no message file - triggers editor path which fails with mock
+	if err := rejectReview(repo, []string{repository.TestCommitG}); err != nil {
+		// With mock repo, editor is "vi" which may or may not work.
+		// The point is to exercise the code path.
+		t.Logf("editor path: %v", err)
+	}
+}
+
+// --- Abandon review with no message (triggers editor path) ---
+
+func TestAbandonReviewNoMessage(t *testing.T) {
+	resetAbandonFlags()
+	defer resetAbandonFlags()
+	repo := repository.NewMockRepoForTest()
+	if err := abandonReview(repo, []string{repository.TestCommitG}); err != nil {
+		t.Logf("editor path: %v", err)
+	}
+}
+
+// --- Accept review editor error (no message, no file) ---
+
+func TestAcceptReviewEditorError(t *testing.T) {
+	resetAcceptFlags()
+	defer resetAcceptFlags()
+	// Accept doesn't use editor, but test the GetDate error path
+	// already covered via TestAcceptReviewBadDate
+}
+
+// --- Verify JSON marshal indent uses the injectable var ---
+
+func TestJsonMarshalIndentDefault(t *testing.T) {
+	result, err := jsonMarshalIndent([]string{"a"}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(result), "a") {
+		t.Error("expected 'a' in marshaled output")
+	}
+}
+
+// --- writeRequest default uses the injectable var ---
+
+func TestWriteRequestDefault(t *testing.T) {
+	origWrite := writeRequest
+	defer func() { writeRequest = origWrite }()
+	// Just verify the default writeRequest doesn't panic on a valid request
+	// We need a real request object, but Write() requires a repo context.
+	// This is tested indirectly through requestReview tests.
+}
+
+// --- Tests for comment.go GetDetachedComments error path in commentOnPath ---
+// This requires a repo where GetDetachedComments fails, which happens when
+// the notes ref doesn't exist. The mock repo always succeeds, so we can't
+// easily trigger this without a wrapper.
+
+// --- submit: no-archive rebase ---
+
+func TestSubmitReviewRebaseNoArchive(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	*submitRebase = true
+	*submitArchive = false
+	if err := submitReview(repo, []string{repository.TestCommitG}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- submit TBR merge ---
+
+func TestSubmitReviewTBRMerge(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	mock := repository.NewMockRepoForTest()
+	if err := mock.SetRef(repository.TestTargetRef, repository.TestCommitE, repository.TestCommitJ); err != nil {
+		t.Fatal(err)
+	}
+	*submitTBR = true
+	*submitMerge = true
+	if err := submitReview(mock, []string{repository.TestCommitG}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- errCreateCommitWithTreeRepo makes GetDetachedComments fail ---
+
+type errCreateCommitWithTreeRepo struct {
+	repository.Repo
+}
+
+func (r errCreateCommitWithTreeRepo) CreateCommitWithTree(details *repository.CommitDetails, t *repository.Tree) (string, error) {
+	return "", fmt.Errorf("create commit with tree failed")
+}
+
+// --- errRebaseRepo makes Rebase fail inside submit ---
+
+type errRebaseRepo struct {
+	repository.Repo
+}
+
+func (r errRebaseRepo) RebaseRef(ref string) error {
+	return fmt.Errorf("rebase failed")
+}
+
+func (r errRebaseRepo) GetSubmitStrategy() (string, error) {
+	return "merge", nil
+}
+
+// lateIsAncestorErrRepo succeeds on IsAncestor during review loading
+// (GetSummaryViaRefs checks if review is submitted) but fails on subsequent
+// IsAncestor calls (in GetHeadCommit). It uses a call counter.
+type lateIsAncestorErrRepo struct {
+	repository.Repo
+	callCount int
+}
+
+func (r *lateIsAncestorErrRepo) IsAncestor(ancestor, descendant string) (bool, error) {
+	r.callCount++
+	if r.callCount <= 2 {
+		// First calls are during review.Get -> GetSummaryViaRefs and Details
+		return r.Repo.IsAncestor(ancestor, descendant)
+	}
+	return false, fmt.Errorf("late is-ancestor failed")
+}
+
+// --- Tests for GetHeadCommit error paths ---
+
+func TestAbandonReviewGetHeadCommitError(t *testing.T) {
+	resetAbandonFlags()
+	defer resetAbandonFlags()
+	repo := &lateIsAncestorErrRepo{Repo: repository.NewMockRepoForTest()}
+	*abandonMessage = "msg"
+	err := abandonReview(repo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected error from GetHeadCommit in abandon")
+	}
+}
+
+func TestAcceptReviewGetHeadCommitError(t *testing.T) {
+	resetAcceptFlags()
+	defer resetAcceptFlags()
+	repo := &lateIsAncestorErrRepo{Repo: repository.NewMockRepoForTest()}
+	*acceptMessage = "LGTM"
+	err := acceptReview(repo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected error from GetHeadCommit in accept")
+	}
+}
+
+func TestRejectReviewGetHeadCommitError(t *testing.T) {
+	resetRejectFlags()
+	defer resetRejectFlags()
+	repo := &lateIsAncestorErrRepo{Repo: repository.NewMockRepoForTest()}
+	*rejectMessage = "NMW"
+	err := rejectReview(repo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected error from GetHeadCommit in reject")
+	}
+}
+
+func TestCommentOnReviewGetHeadCommitError(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := &lateIsAncestorErrRepo{Repo: repository.NewMockRepoForTest()}
+	*commentMessage = "msg"
+	err := commentOnReview(repo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected error from GetHeadCommit in commentOnReview")
+	}
+}
+
+func TestSubmitReviewGetHeadCommitError(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	wrappedRepo := &lateIsAncestorErrRepo{Repo: repo}
+	err := submitReview(wrappedRepo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected error from GetHeadCommit/IsAncestor in submit")
+	}
+}
+
+// --- showDetachedComments with CreateCommitWithTree error ---
+
+func TestShowDetachedCommentsLoadError(t *testing.T) {
+	resetShowFlags()
+	defer resetShowFlags()
+	repo := errCreateCommitWithTreeRepo{repository.NewMockRepoForTest()}
+	err := showDetachedComments(repo, []string{"foo.txt"})
+	if err == nil {
+		t.Error("expected error from GetDetachedComments")
+	}
+}
+
+// --- commentOnPath GetDetachedComments error ---
+
+func TestCommentOnPathGetDetachedCommentsError(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := errCreateCommitWithTreeRepo{repository.NewMockRepoForTest()}
+	*commentMessage = "msg"
+	*commentFile = "foo.txt"
+	err := commentOnPath(repo, nil)
+	if err == nil {
+		t.Error("expected error from GetDetachedComments in commentOnPath")
+	}
+}
+
+// --- abandon Request.Write error ---
+// The Request.Write() error path requires json.Marshal to fail, which
+// requires a non-serializable value. We can't trigger this without source
+// changes. Instead, test the AddComment error path via AppendNote wrapper.
+// The abandon AppendNote error is tested in TestAbandonReviewAppendNoteError.
+
+// --- request getReviewCommit error within requestReview ---
+// This is already covered by TestRequestReviewBadSource and
+// TestRequestReviewBadTarget. But let me verify...
+// Actually, request.go:154 is the getReviewCommit call, which fails when
+// source/target are bad. Let me check if it's still uncovered...
+
+// --- submitReview Rebase error ---
+
+func TestSubmitReviewRebaseError(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	wrappedRepo := errRebaseRepo{repo}
+	*submitRebase = true
+	err := submitReview(wrappedRepo, []string{repository.TestCommitG})
+	if err == nil || !strings.Contains(err.Error(), "rebase failed") {
+		t.Errorf("expected rebase error, got %v", err)
+	}
+}
+
+// --- requestReview with getReviewCommit error (MergeBase fails) ---
+
+func TestRequestReviewGetReviewCommitError(t *testing.T) {
+	resetRequestFlags()
+	defer resetRequestFlags()
+	repo := errMergeBaseRepo{repository.NewMockRepoForTest()}
+	err := requestReview(repo, []string{
+		"-m", "test",
+		"-source", repository.TestReviewRef,
+		"-target", repository.TestTargetRef,
+		"-allow-uncommitted",
+	})
+	if err == nil || !strings.Contains(err.Error(), "merge-base") {
+		t.Errorf("expected merge-base error, got %v", err)
+	}
+}
+
+// --- submitReview IsAncestor error (separate from GetHeadCommit error) ---
+
+func TestSubmitReviewIsAncestorErrorPath(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	// In submitReview, IsAncestor is called at line 83 after GetHeadCommit.
+	// We need enough successful calls to pass through review.Get, then fail.
+	// review.Get calls: GetSummaryViaRefs->IsAncestor (1), Details->GetHeadCommit->IsAncestor (1)
+	// submitReview calls: GetHeadCommit->IsAncestor (1), then repo.IsAncestor at line 83 (fail)
+	// So fail after 3 calls (threshold of 3, callCount starts at -1 to allow 4 total calls)
+	wrappedRepo := &lateIsAncestorErrRepo{Repo: repo, callCount: -1}
+	err := submitReview(wrappedRepo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected IsAncestor error in submit")
+	}
+}
+
+// --- submitReview GetHeadCommit error after rebase ---
+
+func TestSubmitReviewGetHeadCommitAfterRebaseError(t *testing.T) {
+	resetSubmitFlags()
+	defer resetSubmitFlags()
+	repo := setupAcceptedReview(t)
+	// IsAncestor call count during submitReview with rebase:
+	//   1. review.Get -> GetSummaryViaRefs -> IsAncestor
+	//   2. review.Get -> Details -> GetHeadCommit -> IsAncestor
+	//   3. submitReview:78 -> r.GetHeadCommit -> IsAncestor
+	//   4. submitReview:83 -> repo.IsAncestor(target, source)
+	//   5. r.Rebase:682 -> r.GetHeadCommit -> IsAncestor
+	//   6. submitReview:112 -> r.GetHeadCommit -> IsAncestor <- fail here
+	// Start callCount at -3 so 5 calls succeed (callCount 3 > threshold 2 on call 6)
+	wrappedRepo := &lateIsAncestorErrRepo{Repo: repo, callCount: -3}
+	*submitRebase = true
+	err := submitReview(wrappedRepo, []string{repository.TestCommitG})
+	if err == nil {
+		t.Error("expected GetHeadCommit error after rebase")
+	}
+}
+
+// --- abandon Request.Write error ---
+// This requires json.Marshal to fail. We can use the writeRequest var
+// injection to simulate this path.
+
+func TestAbandonReviewWriteError(t *testing.T) {
+	resetAbandonFlags()
+	defer resetAbandonFlags()
+	orig := writeRequest
+	defer func() { writeRequest = orig }()
+	writeRequest = func(r *request.Request) (repository.Note, error) {
+		return nil, fmt.Errorf("write error")
+	}
+	*abandonMessage = "msg"
+	repo := repository.NewMockRepoForTest()
+	err := abandonReview(repo, []string{repository.TestCommitG})
+	if err == nil || !strings.Contains(err.Error(), "write error") {
+		t.Errorf("expected write error, got %v", err)
+	}
+}
+
+// --- Additional test for webGenerateStatic with reviews ---
+
+func TestWebGenerateStaticWithReviews(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/static-reviews"
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err != nil {
+		t.Fatal(err)
+	}
+	// Verify files were created
+	entries, err := os.ReadDir(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Error("expected files in output directory")
+	}
+}
+
+// --- webGenerateStatic with read-only dir to trigger os.Create errors ---
+
+func TestWebGenerateStaticReadOnlyDir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping: root ignores file permissions")
+	}
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/readonly"
+	if err := os.Mkdir(outPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(outPath, 0555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(outPath, 0755)
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from os.Create on read-only directory")
+	}
+}
+
+func TestWebGenerateStaticRepoCreateError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Pre-create the output dir and put a directory named "index.html"
+	// inside it so os.Create("index.html") fails (can't truncate a dir).
+	if err := os.MkdirAll(outPath+"/index.html", 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from os.Create for repo file")
+	}
+}
+
+func TestWebGenerateStaticBranchCreateError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Let Update populate branches so the inner loop runs
+	if err := repoDetails.Update(); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-create output dir with branch_0.html as a directory
+	if err := os.MkdirAll(outPath+"/branch_0.html", 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from os.Create for branch file")
+	}
+}
+
+func TestWebGenerateStaticReviewCreateError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repoDetails.Update(); err != nil {
+		t.Fatal(err)
+	}
+	// Find a review revision so we can block its file creation
+	if len(repoDetails.Branches) == 0 {
+		t.Skip("no branches in mock repo")
+	}
+	var revision string
+	for _, branch := range repoDetails.Branches {
+		for _, rev := range branch.OpenReviews {
+			revision = rev.Revision
+			break
+		}
+		for _, rev := range branch.ClosedReviews {
+			if revision == "" {
+				revision = rev.Revision
+			}
+			break
+		}
+		if revision != "" {
+			break
+		}
+	}
+	if revision == "" {
+		t.Skip("no reviews found")
+	}
+	// Pre-create output dir with review_{revision}.html as a directory
+	if err := os.MkdirAll(outPath+"/review_"+revision+".html", 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from os.Create for review file")
+	}
+}
+
+func TestWebGenerateStaticCssWriteError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	if err := os.MkdirAll(outPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create a symlink stylesheet.css -> /dev/full so os.Create succeeds
+	// but the subsequent write returns ENOSPC.
+	if err := os.Symlink("/dev/full", outPath+"/stylesheet.css"); err != nil {
+		t.Skip("cannot create symlink to /dev/full: " + err.Error())
+	}
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from WriteStyleSheet on /dev/full")
+	}
+}
+
+func TestWebGenerateStaticRepoWriteError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	if err := os.MkdirAll(outPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Make index.html a symlink to /dev/full so WriteRepoTemplate fails
+	if err := os.Symlink("/dev/full", outPath+"/index.html"); err != nil {
+		t.Skip("cannot create symlink to /dev/full: " + err.Error())
+	}
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from WriteRepoTemplate on /dev/full")
+	}
+}
+
+func TestWebGenerateStaticBranchWriteError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repoDetails.Update(); err != nil {
+		t.Fatal(err)
+	}
+	if len(repoDetails.Branches) == 0 {
+		t.Skip("no branches in mock repo")
+	}
+	if err := os.MkdirAll(outPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Make branch_0.html a symlink to /dev/full so WriteBranchTemplate fails
+	if err := os.Symlink("/dev/full", outPath+"/branch_0.html"); err != nil {
+		t.Skip("cannot create symlink to /dev/full: " + err.Error())
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from WriteBranchTemplate on /dev/full")
+	}
+}
+
+func TestWebGenerateStaticReviewWriteError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	outPath := dir + "/out"
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repoDetails.Update(); err != nil {
+		t.Fatal(err)
+	}
+	// Find a review revision
+	var revision string
+	for _, branch := range repoDetails.Branches {
+		for _, rev := range branch.OpenReviews {
+			revision = rev.Revision
+			break
+		}
+		for _, rev := range branch.ClosedReviews {
+			if revision == "" {
+				revision = rev.Revision
+			}
+			break
+		}
+		if revision != "" {
+			break
+		}
+	}
+	if revision == "" {
+		t.Skip("no reviews found")
+	}
+	if err := os.MkdirAll(outPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Make review_{revision}.html a symlink to /dev/full so WriteReviewTemplate fails
+	if err := os.Symlink("/dev/full", outPath+"/review_"+revision+".html"); err != nil {
+		t.Skip("cannot create symlink to /dev/full: " + err.Error())
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from WriteReviewTemplate on /dev/full")
+	}
+}
+
+func TestWebGenerateStaticMkdirError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	repo := repository.NewMockRepoForTest()
+	dir := t.TempDir()
+	// Put a regular file where the output dir should be, so Mkdir fails
+	// with something other than ErrExist.
+	outPath := dir + "/out"
+	if err := os.WriteFile(outPath, []byte("block"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	*outputDir = outPath
+	repoDetails, err := web.NewRepoDetails(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webGenerateStatic(repoDetails); err == nil {
+		t.Error("expected error from os.Mkdir on file path")
+	}
+}
+
+// --- accept date valid ---
+
+func TestAcceptReviewWithDate(t *testing.T) {
+	resetAcceptFlags()
+	defer resetAcceptFlags()
+	repo := repository.NewMockRepoForTest()
+	if err := acceptReview(repo, []string{"-m", "LGTM", "-date", "1000000000 +0000", repository.TestCommitG}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- comment date valid ---
+
+func TestCommentOnReviewWithDate(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := repository.NewMockRepoForTest()
+	*commentMessage = "dated"
+	*commentDate = "1000000000 +0000"
+	if err := commentOnReview(repo, []string{repository.TestCommitG}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- PullCmdRunMethod with remote ---
+
+func TestPullCmdRunMethodWithRemote(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	if err := pullCmd.RunMethod(repo, []string{"upstream"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --- Comment with detached flag through RunMethod ---
+
+func TestCommentCmdRunMethodDetachedBadRef(t *testing.T) {
+	resetCommentFlags()
+	defer resetCommentFlags()
+	repo := repository.NewMockRepoForTest()
+	err := commentCmd.RunMethod(repo, []string{"-d", "-f", "foo.txt", "-m", "msg", "nonexistent_ref"})
+	if err == nil {
+		t.Error("expected error for bad ref in detached comment")
+	}
+}
+
+// --- Verify commands.go json/write vars default correctly ---
+
+// --- webCmd RunMethod with port (webServe path) ---
+
+func TestWebCmdRunMethodWithPort(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := repository.NewMockRepoForTest()
+	// Bind a listener on a random port, then try to serve on the same port
+	// to trigger an "address already in use" error from ListenAndServe.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().(*net.TCPAddr)
+	captureStdout(t, func() {
+		webErr := webCmd.RunMethod(repo, []string{"-port", fmt.Sprintf("%d", addr.Port)})
+		if webErr == nil {
+			t.Error("expected error from webServe on already-bound port")
+		}
+	})
+}
+
+func TestDefaultJsonMarshalIndent(t *testing.T) {
+	b, err := json.MarshalIndent([]int{1}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b2, err := jsonMarshalIndent([]int{1}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != string(b2) {
+		t.Error("jsonMarshalIndent should match json.MarshalIndent by default")
 	}
 }

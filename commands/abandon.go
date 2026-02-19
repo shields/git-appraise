@@ -96,7 +96,7 @@ func abandonReview(repo repository.Repo, args []string) error {
 	// Empty target ref indicates the request was abandoned.
 	r.Request.TargetRef = ""
 
-	note, err := r.Request.Write()
+	note, err := writeRequest(&r.Request)
 	if err != nil {
 		return err
 	}

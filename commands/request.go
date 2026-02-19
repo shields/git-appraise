@@ -162,11 +162,13 @@ func requestReview(repo repository.Repo, args []string) error {
 		}
 		r.Description = description
 	}
-	note, err := r.Write()
+	note, err := writeRequest(&r)
 	if err != nil {
 		return err
 	}
-	repo.AppendNote(request.Ref, reviewCommit, note)
+	if err := repo.AppendNote(request.Ref, reviewCommit, note); err != nil {
+		return err
+	}
 	if !*requestQuiet {
 		fmt.Printf(requestSummaryTemplate, reviewCommit, r.TargetRef, r.ReviewRef, r.Description)
 	}

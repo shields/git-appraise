@@ -17,7 +17,6 @@ limitations under the License.
 package commands
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 
@@ -44,7 +43,7 @@ func listReviews(repo repository.Repo, args []string) error {
 		reviews = review.ListOpen(repo)
 	}
 	if *listJSONOutput {
-		b, err := json.MarshalIndent(reviews, "", "  ")
+		b, err := jsonMarshalIndent(reviews, "", "  ")
 		if err != nil {
 			return err
 		}
