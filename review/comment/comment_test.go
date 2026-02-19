@@ -1,6 +1,7 @@
 package comment
 
 import (
+	"fmt"
 	"testing"
 
 	"msrl.dev/git-appraise/repository"
@@ -297,5 +298,39 @@ func TestRangeSetInvalidColumn(t *testing.T) {
 	r := &Range{}
 	if err := r.Set("5+abc"); err == nil {
 		t.Fatal("expected error for non-numeric column")
+	}
+}
+
+func TestLocationCheckNilRange(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  nil,
+	}
+	if err := loc.Check(repo); err != nil {
+		t.Fatalf("expected nil error for nil Range, got %v", err)
+	}
+}
+
+// showErrorRepo wraps a real Repo and injects an error for Show.
+type showErrorRepo struct {
+	repository.Repo
+}
+
+func (r *showErrorRepo) Show(commit, path string) (string, error) {
+	return "", fmt.Errorf("show error")
+}
+
+func TestLocationCheckShowError(t *testing.T) {
+	repo := &showErrorRepo{Repo: repository.NewMockRepoForTest()}
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  &Range{StartLine: 1},
+	}
+	err := loc.Check(repo)
+	if err == nil {
+		t.Fatal("expected error from Show")
 	}
 }

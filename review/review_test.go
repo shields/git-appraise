@@ -2456,3 +2456,141 @@ func TestAddDetachedCommentAppendNoteError(t *testing.T) {
 		t.Fatal("expected error from AppendNote")
 	}
 }
+
+func TestGetCommentsJSONMarshalError(t *testing.T) {
+	orig := jsonMarshal
+	defer func() { jsonMarshal = orig }()
+	jsonMarshal = func(v any) ([]byte, error) {
+		return nil, fmt.Errorf("marshal error")
+	}
+	threads := []CommentThread{
+		{Comment: comment.Comment{Description: "test"}},
+	}
+	_, err := GetCommentsJSON(threads)
+	if err == nil {
+		t.Fatal("expected error from jsonMarshal")
+	}
+}
+
+func TestSummaryGetJSONMarshalError(t *testing.T) {
+	orig := jsonMarshal
+	defer func() { jsonMarshal = orig }()
+	jsonMarshal = func(v any) ([]byte, error) {
+		return nil, fmt.Errorf("marshal error")
+	}
+	s := &Summary{Revision: "abc"}
+	_, err := s.GetJSON()
+	if err == nil {
+		t.Fatal("expected error from jsonMarshal")
+	}
+}
+
+func TestReviewGetJSONMarshalError(t *testing.T) {
+	orig := jsonMarshal
+	defer func() { jsonMarshal = orig }()
+	jsonMarshal = func(v any) ([]byte, error) {
+		return nil, fmt.Errorf("marshal error")
+	}
+	r := &Review{Summary: &Summary{Revision: "abc"}}
+	_, err := r.GetJSON()
+	if err == nil {
+		t.Fatal("expected error from jsonMarshal")
+	}
+}
+
+func TestAddCommentAppendNoteError(t *testing.T) {
+	repo := &errorRepo{
+		Repo:          repository.NewMockRepoForTest(),
+		appendNoteErr: fmt.Errorf("append error"),
+	}
+	review := &Review{
+		Summary: &Summary{
+			Repo:     repo,
+			Revision: repository.TestCommitG,
+			Request: request.Request{
+				ReviewRef: repository.TestReviewRef,
+				TargetRef: "refs/heads/master",
+			},
+		},
+	}
+	c := comment.New("tester@example.com", "test comment")
+	c.Timestamp = "9999999999"
+	err := review.AddComment(c)
+	if err == nil {
+		t.Fatal("expected error from AppendNote")
+	}
+}
+
+func TestRebaseAppendNoteErrorAfterRebase(t *testing.T) {
+	baseRepo := repository.NewMockRepoForTest()
+	repo := &errorRepo{
+		Repo: baseRepo,
+	}
+	review, err := Get(baseRepo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Replace the repo with the errorRepo so AppendNote fails after rebase succeeds
+	review.Summary.Repo = repo
+	repo.appendNoteErr = fmt.Errorf("append error")
+	err = review.Rebase(false)
+	if err == nil {
+		t.Fatal("expected error from AppendNote after rebase")
+	}
+}
+
+func TestAddCommentWriteError(t *testing.T) {
+	origWrite := writeComment
+	defer func() { writeComment = origWrite }()
+	writeComment = func(c comment.Comment) (repository.Note, error) {
+		return nil, fmt.Errorf("write error")
+	}
+	repo := repository.NewMockRepoForTest()
+	review := &Review{
+		Summary: &Summary{
+			Repo:     repo,
+			Revision: repository.TestCommitG,
+			Request: request.Request{
+				ReviewRef: repository.TestReviewRef,
+				TargetRef: "refs/heads/master",
+			},
+		},
+	}
+	c := comment.New("tester@example.com", "test")
+	err := review.AddComment(c)
+	if err == nil {
+		t.Fatal("expected error from writeComment")
+	}
+}
+
+func TestRebaseWriteRequestError(t *testing.T) {
+	origWrite := writeRequest
+	defer func() { writeRequest = origWrite }()
+	writeRequest = func(r *request.Request) (repository.Note, error) {
+		return nil, fmt.Errorf("write error")
+	}
+	repo := repository.NewMockRepoForTest()
+	review, err := Get(repo, repository.TestCommitG)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = review.Rebase(false)
+	if err == nil {
+		t.Fatal("expected error from writeRequest")
+	}
+}
+
+func TestAddDetachedCommentWriteError(t *testing.T) {
+	origWrite := writeComment
+	defer func() { writeComment = origWrite }()
+	writeComment = func(c comment.Comment) (repository.Note, error) {
+		return nil, fmt.Errorf("write error")
+	}
+	repo := repository.NewMockRepoForTest()
+	c := comment.New("tester@example.com", "test")
+	c.Location = &comment.Location{Path: "test/path.go"}
+	err := AddDetachedComment(repo, &c)
+	if err == nil {
+		t.Fatal("expected error from writeComment")
+	}
+}

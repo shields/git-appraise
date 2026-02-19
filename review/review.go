@@ -34,6 +34,18 @@ const archiveRef = "refs/devtools/archives/reviews"
 
 var emptyTree = repository.NewTree(map[string]repository.TreeChild{})
 
+// Test seams: these package-level vars allow tests to inject failures.
+// Tests that override them are not safe for t.Parallel().
+var jsonMarshal = json.Marshal
+
+var writeComment = func(c comment.Comment) (repository.Note, error) {
+	return c.Write()
+}
+
+var writeRequest = func(r *request.Request) (repository.Note, error) {
+	return r.Write()
+}
+
 // CommentThread represents the tree-based hierarchy of comments.
 //
 // The Resolved field represents the aggregate status of the entire thread. If
@@ -496,7 +508,7 @@ func prettyPrintJSON(jsonBytes []byte) (string, error) {
 
 // GetCommentsJSON returns the pretty printed JSON for a slice of comment threads.
 func GetCommentsJSON(cs []CommentThread) (string, error) {
-	jsonBytes, err := json.Marshal(cs)
+	jsonBytes, err := jsonMarshal(cs)
 	if err != nil {
 		return "", err
 	}
@@ -505,7 +517,7 @@ func GetCommentsJSON(cs []CommentThread) (string, error) {
 
 // GetJSON returns the pretty printed JSON for a review summary.
 func (r *Summary) GetJSON() (string, error) {
-	jsonBytes, err := json.Marshal(*r)
+	jsonBytes, err := jsonMarshal(*r)
 	if err != nil {
 		return "", err
 	}
@@ -514,7 +526,7 @@ func (r *Summary) GetJSON() (string, error) {
 
 // GetJSON returns the pretty printed JSON for a review.
 func (r *Review) GetJSON() (string, error) {
-	jsonBytes, err := json.Marshal(*r)
+	jsonBytes, err := jsonMarshal(*r)
 	if err != nil {
 		return "", err
 	}
@@ -653,13 +665,12 @@ func (r *Review) GetDiff(diffArgs ...string) (string, error) {
 
 // AddComment adds the given comment to the review.
 func (r *Review) AddComment(c comment.Comment) error {
-	commentNote, err := c.Write()
+	commentNote, err := writeComment(c)
 	if err != nil {
 		return err
 	}
 
-	r.Repo.AppendNote(comment.Ref, r.Revision, commentNote)
-	return nil
+	return r.Repo.AppendNote(comment.Ref, r.Revision, commentNote)
 }
 
 // Rebase performs an interactive rebase of the review onto its target ref.
@@ -692,7 +703,7 @@ func (r *Review) Rebase(archivePrevious bool) error {
 		return err
 	}
 	r.Request.Alias = alias
-	newNote, err := r.Request.Write()
+	newNote, err := writeRequest(&r.Request)
 	if err != nil {
 		return err
 	}
@@ -728,7 +739,7 @@ func AddDetachedComment(repo repository.Repo, c *comment.Comment) error {
 	if err != nil {
 		return fmt.Errorf("Failure finding the well-known commit for detached comments on %q: %v", path, err)
 	}
-	commentNote, err := c.Write()
+	commentNote, err := writeComment(*c)
 	if err != nil {
 		return err
 	}

@@ -62,6 +62,9 @@ func (location *Location) Check(repo repository.Repo) error {
 	if err != nil {
 		return err
 	}
+	if location.Range == nil {
+		return nil
+	}
 	lines := strings.Split(contents, "\n")
 	if location.Range.StartLine > uint32(len(lines)) {
 		return fmt.Errorf("Line number %d does not exist in file %q",

@@ -205,3 +205,24 @@ func TestGetNotesEmptyURL(t *testing.T) {
 		t.Fatalf("expected nil notes for empty URL, got %v", notes)
 	}
 }
+
+func TestGetLintReportResultReadBodyError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100000")
+		w.WriteHeader(200)
+		// Write a small amount, then let the handler return, closing the connection.
+		// The client will try to read 100000 bytes but the connection closes early,
+		// causing io.ReadAll to return an error.
+		_, _ = w.Write([]byte("{"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer server.Close()
+
+	report := Report{Timestamp: "1", URL: server.URL}
+	_, err := report.GetLintReportResult()
+	if err == nil {
+		t.Fatal("expected error from io.ReadAll due to truncated response body")
+	}
+}
