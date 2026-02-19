@@ -83,7 +83,7 @@ type mockRepoForTest struct {
 	Trees   map[string]map[string]TreeChild `json:"-"`
 }
 
-func (r *mockRepoForTest) createCommit(message, time, tree string, parents []string) (string, error) {
+func (r *mockRepoForTest) createCommit(message, time, tree string, parents []string) string {
 	newCommit := mockCommit{
 		Message: message,
 		Time:    time,
@@ -92,11 +92,11 @@ func (r *mockRepoForTest) createCommit(message, time, tree string, parents []str
 	}
 	newCommitJSON, err := json.Marshal(newCommit)
 	if err != nil {
-		return "", err
+		panic("unreachable: mockCommit marshal: " + err.Error())
 	}
 	newCommitHash := fmt.Sprintf("%x", sha1.Sum([]byte(newCommitJSON)))
 	r.Commits[newCommitHash] = newCommit
-	return newCommitHash, nil
+	return newCommitHash
 }
 
 // NewMockRepoForTest returns a mocked-out instance of the Repo interface that has been pre-populated with test data.
@@ -194,7 +194,7 @@ func (r *mockRepoForTest) GetDataDir() (string, error) { return "~/mockRepo/.git
 func (r *mockRepoForTest) GetRepoStateHash() (string, error) {
 	repoJSON, err := json.Marshal(r)
 	if err != nil {
-		return "", err
+		panic("unreachable: mockRepoForTest marshal: " + err.Error())
 	}
 	return fmt.Sprintf("%x", sha1.Sum([]byte(repoJSON))), nil
 }
@@ -472,10 +472,7 @@ func (r *mockRepoForTest) ArchiveRef(ref, archive string) error {
 	} else {
 		archiveParents = []string{commitToArchive}
 	}
-	archiveCommit, err := r.createCommit("Archiving", "Nowish", "", archiveParents)
-	if err != nil {
-		return err
-	}
+	archiveCommit := r.createCommit("Archiving", "Nowish", "", archiveParents)
 	r.Refs[archive] = archiveCommit
 	return nil
 }
@@ -501,10 +498,7 @@ func (r *mockRepoForTest) MergeRef(ref string, fastForward bool, messages ...str
 		message := strings.Join(messages, "\n\n")
 		time := newCommit.Time
 		parents := []string{origCommit, newCommitHash}
-		newCommitHash, err = r.createCommit(message, time, "", parents)
-		if err != nil {
-			return err
-		}
+		newCommitHash = r.createCommit(message, time, "", parents)
 	}
 	r.Refs[r.Head] = newCommitHash
 	return nil
@@ -517,10 +511,7 @@ func (r *mockRepoForTest) RebaseRef(ref string) error {
 	if err != nil {
 		return err
 	}
-	newCommitHash, err := r.createCommit(origCommit.Message, origCommit.Time, origCommit.Tree, []string{parentHash})
-	if err != nil {
-		return err
-	}
+	newCommitHash := r.createCommit(origCommit.Message, origCommit.Time, origCommit.Tree, []string{parentHash})
 	if strings.HasPrefix(r.Head, "refs/heads/") {
 		r.Refs[r.Head] = newCommitHash
 	} else {
@@ -639,7 +630,7 @@ func (r *mockRepoForTest) ReadTree(ref string) (*Tree, error) {
 
 // CreateCommit creates a commit object and returns its hash.
 func (r *mockRepoForTest) CreateCommit(details *CommitDetails) (string, error) {
-	return r.createCommit(details.Summary, details.Time, details.Tree, details.Parents)
+	return r.createCommit(details.Summary, details.Time, details.Tree, details.Parents), nil
 }
 
 // CreateCommitWithTree creates a commit object with the given tree and returns its hash.

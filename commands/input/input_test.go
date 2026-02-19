@@ -6,9 +6,12 @@ package input
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	exec "golang.org/x/sys/execabs"
@@ -424,5 +427,52 @@ func TestFromFileStdinTTYWithData(t *testing.T) {
 	}
 	if got != "hello from tty\nsecond line\n" {
 		t.Errorf("FromFile('-') = %q, want %q", got, "hello from tty\nsecond line\n")
+	}
+}
+
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) {
+	return 0, errors.New("simulated scan error")
+}
+
+func TestFromFileStdinTTYScannerError(t *testing.T) {
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skip("cannot open /dev/null: " + err.Error())
+	}
+	defer devNull.Close()
+	stat, err := devNull.Stat()
+	if err != nil {
+		t.Skip("cannot stat /dev/null")
+	}
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		t.Skip("/dev/null is not a character device on this platform")
+	}
+
+	old := os.Stdin
+	os.Stdin = devNull
+	defer func() { os.Stdin = old }()
+
+	oldStdout := os.Stdout
+	devNull2, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull2.Close()
+	os.Stdout = devNull2
+	defer func() { os.Stdout = oldStdout }()
+
+	origScanner := newTTYScanner
+	defer func() { newTTYScanner = origScanner }()
+	newTTYScanner = func() *bufio.Scanner {
+		// Reader that returns an error on first read, simulating a scan failure
+		r := io.MultiReader(strings.NewReader("partial\n"), errReader{})
+		return bufio.NewScanner(r)
+	}
+
+	_, err = FromFile("-")
+	if err == nil {
+		t.Fatal("expected error from scanner")
 	}
 }
