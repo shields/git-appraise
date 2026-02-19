@@ -38,8 +38,6 @@ func captureStdout(t *testing.T, f func()) string {
 	return <-outCh
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 func testMockRepo() repository.Repo {
 	return repository.NewMockRepoForTest()
 }
@@ -153,21 +151,21 @@ func TestGetStatusStringTBR(t *testing.T) {
 }
 
 func TestGetStatusStringSubmitted(t *testing.T) {
-	s := &review.Summary{Resolved: boolPtr(true), Submitted: true}
+	s := &review.Summary{Resolved: new(true), Submitted: true}
 	if got := getStatusString(s); got != "submitted" {
 		t.Errorf("got %q, want %q", got, "submitted")
 	}
 }
 
 func TestGetStatusStringAccepted(t *testing.T) {
-	s := &review.Summary{Resolved: boolPtr(true)}
+	s := &review.Summary{Resolved: new(true)}
 	if got := getStatusString(s); got != "accepted" {
 		t.Errorf("got %q, want %q", got, "accepted")
 	}
 }
 
 func TestGetStatusStringDanger(t *testing.T) {
-	s := &review.Summary{Resolved: boolPtr(false), Submitted: true}
+	s := &review.Summary{Resolved: new(false), Submitted: true}
 	if got := getStatusString(s); got != "danger" {
 		t.Errorf("got %q, want %q", got, "danger")
 	}
@@ -175,7 +173,7 @@ func TestGetStatusStringDanger(t *testing.T) {
 
 func TestGetStatusStringAbandon(t *testing.T) {
 	s := &review.Summary{
-		Resolved: boolPtr(false),
+		Resolved: new(false),
 		Request:  request.Request{TargetRef: ""},
 	}
 	if got := getStatusString(s); got != "abandon" {
@@ -185,7 +183,7 @@ func TestGetStatusStringAbandon(t *testing.T) {
 
 func TestGetStatusStringRejected(t *testing.T) {
 	s := &review.Summary{
-		Resolved: boolPtr(false),
+		Resolved: new(false),
 		Request:  request.Request{TargetRef: "refs/heads/master"},
 	}
 	if got := getStatusString(s); got != "rejected" {
@@ -255,7 +253,7 @@ func TestShowSubThreadLGTM(t *testing.T) {
 			Author:      "tester",
 			Description: "looks good",
 		},
-		Resolved: boolPtr(true),
+		Resolved: new(true),
 	}
 	out := captureStdout(t, func() {
 		showSubThread(testMockRepo(), thread, "")
@@ -273,7 +271,7 @@ func TestShowSubThreadNeedsWork(t *testing.T) {
 			Author:      "reviewer",
 			Description: "needs changes",
 		},
-		Resolved: boolPtr(false),
+		Resolved: new(false),
 	}
 	out := captureStdout(t, func() {
 		showSubThread(testMockRepo(), thread, "")
