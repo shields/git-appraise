@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -709,5 +711,167 @@ func TestMockRepoNoopOperations(t *testing.T) {
 	}
 	if err := repo.Push("origin", "refs/heads/*"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMockRepoResolveLocalRefHEAD(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	hash, err := repo.GetCommitHash("HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash != TestCommitJ {
+		t.Fatalf("expected %q, got %q", TestCommitJ, hash)
+	}
+}
+
+func TestMockRepoIsAncestorGetCommitError(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// Add a ref that points to a hash not in Commits, so resolveLocalRef
+	// succeeds (it's in Refs) but getCommit on the resolved hash fails.
+	repo.Refs["refs/heads/bad"] = "nonexistent_hash"
+	_, err := repo.IsAncestor(TestCommitA, "refs/heads/bad")
+	if err == nil {
+		t.Fatal("expected error when getCommit fails for descendant")
+	}
+}
+
+func TestMockRepoMergeRefNonFFHeadResolveError(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// Set Head to a value that can resolve ref (it's valid) but then
+	// resolveLocalRef(r.Head) fails in non-ff path.
+	repo.Head = "nonexistent_head_ref"
+	err := repo.MergeRef(TestCommitA, false, "msg")
+	if err == nil {
+		t.Fatal("expected error when head cannot be resolved in non-ff merge")
+	}
+}
+
+func TestMockRepoMergeRefNonFFGetCommitError(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// The getCommit(ref) error path in non-ff MergeRef (line 498) is unreachable:
+	// resolveLocalRef(ref) succeeds on line 488, so calling getCommit(ref) which
+	// calls resolveLocalRef(ref) again will also succeed.
+	// Instead, test that a non-ff merge with valid refs and messages works.
+	repo.Head = TestTargetRef
+	err := repo.MergeRef(TestReviewRef, false, "msg1", "msg2")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMockRepoRebaseRefWithRefNotInRefs(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// When ref is not in r.Refs, parentHash will be empty string.
+	// Head must resolve properly for getCommit to work.
+	repo.Head = TestReviewRef
+	err := repo.RebaseRef("nonexistent_ref")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMockRepoListCommitsBetweenNotBlocked(t *testing.T) {
+	repo := NewMockRepoForTest()
+	// Use from=C, to=D. D's ancestors include B and C.
+	// IsAncestor(B, C) is false since B is not reachable from C.
+	// So B should be included in the result (the !blocked path).
+	commits, err := repo.ListCommitsBetween(TestCommitC, TestCommitD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected commits between C and D")
+	}
+	// D and B should be in the result (B is not an ancestor of C)
+	foundD := false
+	foundB := false
+	for _, c := range commits {
+		if c == TestCommitD {
+			foundD = true
+		}
+		if c == TestCommitB {
+			foundB = true
+		}
+	}
+	if !foundD {
+		t.Fatal("expected D in result")
+	}
+	if !foundB {
+		t.Fatal("expected B in result (not an ancestor of C)")
+	}
+}
+
+// failingTreeChild is a TreeChild whose Store always returns an error.
+type failingTreeChild struct{}
+
+func (f *failingTreeChild) Type() string                       { return "blob" }
+func (f *failingTreeChild) Store(_ Repo) (string, error) { return "", fmt.Errorf("store failed") }
+
+func TestMockRepoStoreTreeChildStoreError(t *testing.T) {
+	repo := NewMockRepoForTest()
+	contents := map[string]TreeChild{
+		"bad.txt": &failingTreeChild{},
+	}
+	_, err := repo.StoreTree(contents)
+	if err == nil {
+		t.Fatal("expected error when child.Store fails")
+	}
+}
+
+func TestMockRepoCreateCommitWithTreeStoreError(t *testing.T) {
+	repo := NewMockRepoForTest()
+	tree := NewTree(map[string]TreeChild{
+		"bad.txt": &failingTreeChild{},
+	})
+	details := &CommitDetails{
+		Summary: "commit with bad tree",
+		Time:    "999",
+		Parents: []string{TestCommitA},
+	}
+	_, err := repo.CreateCommitWithTree(details, tree)
+	if err == nil {
+		t.Fatal("expected error when StoreTree fails")
+	}
+}
+
+func TestMockRepoReadTreeNilTrees(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// Trees field is nil initially (never stored anything)
+	repo.Trees = nil
+	_, err := repo.ReadTree("anything")
+	if err == nil {
+		t.Fatal("expected error when Trees is nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected 'not found' error, got: %v", err)
+	}
+}
+
+func TestMockRepoReadTreeExistingKeyNotFound(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// Initialize Trees but with a different key
+	repo.Trees = make(map[string]map[string]TreeChild)
+	repo.Trees["some_hash"] = map[string]TreeChild{}
+	_, err := repo.ReadTree("nonexistent_hash")
+	if err == nil {
+		t.Fatal("expected error for missing tree hash")
+	}
+}
+
+func TestMockRepoArchiveRefCreateCommitSuccess(t *testing.T) {
+	repo := NewMockRepoForTest().(*mockRepoForTest)
+	// Test archiving with archive already existing (both paths in ArchiveRef)
+	archive := "refs/devtools/archives/test"
+	if err := repo.ArchiveRef(TestTargetRef, archive); err != nil {
+		t.Fatal(err)
+	}
+	// Archive again with a different ref
+	if err := repo.ArchiveRef(TestReviewRef, archive); err != nil {
+		t.Fatal(err)
+	}
+	has, _ := repo.HasRef(archive)
+	if !has {
+		t.Fatal("expected archive ref to exist")
 	}
 }
