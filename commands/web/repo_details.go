@@ -146,10 +146,10 @@ func (repoDetails *RepoDetails) UpdateRepoDescription() {
 }
 
 // NewRepoDetails constructs a RepoDetails instance from the given Repo instance.
-func NewRepoDetails(repo repository.Repo) (*RepoDetails, error) {
+func NewRepoDetails(repo repository.Repo) *RepoDetails {
 	repoDetails := &RepoDetails{Path: repo.GetPath(), Repo: repo}
 	repoDetails.UpdateRepoDescription()
-	return repoDetails, nil
+	return repoDetails
 }
 
 // GetBranchDetails constructs a concise summary of the branch.

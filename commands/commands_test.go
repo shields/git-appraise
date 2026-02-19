@@ -1629,10 +1629,7 @@ func TestWebGenerateStatic(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
 	dir := t.TempDir()
 	*outputDir = dir + "/static"
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	// webGenerateStatic calls repoDetails.Update() internally (web.go:26),
 	// so no separate Update() call is needed here.
 	if err := webGenerateStatic(repoDetails); err != nil {
@@ -1650,10 +1647,7 @@ func TestWebGenerateStaticExistingDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err != nil {
 		t.Fatal(err)
 	}
@@ -1664,10 +1658,7 @@ func TestWebGenerateStaticBadDir(t *testing.T) {
 	defer resetWebFlags()
 	repo := repository.NewMockRepoForTest()
 	*outputDir = "/nonexistent/path/static"
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error for bad output dir")
 	}
@@ -1675,10 +1666,7 @@ func TestWebGenerateStaticBadDir(t *testing.T) {
 
 func TestWebSetupHandlers(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	// Update() is called explicitly here because webSetupHandlers does not
 	// call it internally (unlike webGenerateStatic which does).
 	if err := repoDetails.Update(); err != nil {
@@ -2483,10 +2471,7 @@ func TestWebGenerateStaticUpdateError(t *testing.T) {
 	repo := errGetRepoStateHashRepo{repository.NewMockRepoForTest()}
 	dir := t.TempDir()
 	*outputDir = dir + "/static"
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	// Update will fail because GetRepoStateHash returns error
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error from Update in webGenerateStatic")
@@ -2510,10 +2495,7 @@ func TestWebGenerateStaticChdirError(t *testing.T) {
 	}
 	f.Close()
 	*outputDir = tmpFile
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error from Chdir on a file")
 	}
@@ -2568,10 +2550,7 @@ func TestGetDateFromGitCommitterDate(t *testing.T) {
 
 func TestWebSetupHandlersBranch(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -2918,10 +2897,7 @@ func TestWebGenerateStaticWithReviews(t *testing.T) {
 	dir := t.TempDir()
 	outPath := dir + "/static-reviews"
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err != nil {
 		t.Fatal(err)
 	}
@@ -2954,10 +2930,7 @@ func TestWebGenerateStaticReadOnlyDir(t *testing.T) {
 	}
 	defer os.Chmod(outPath, 0755)
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error from os.Create on read-only directory")
 	}
@@ -2972,10 +2945,7 @@ func TestWebGenerateStaticRepoCreateError(t *testing.T) {
 	dir := t.TempDir()
 	outPath := dir + "/out"
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	// Pre-create the output dir and put a directory named "index.html"
 	// inside it so os.Create("index.html") fails (can't truncate a dir).
 	if err := os.MkdirAll(outPath+"/index.html", 0755); err != nil {
@@ -2995,10 +2965,7 @@ func TestWebGenerateStaticBranchCreateError(t *testing.T) {
 	dir := t.TempDir()
 	outPath := dir + "/out"
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	// Let Update populate branches so the inner loop runs
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
@@ -3021,10 +2988,7 @@ func TestWebGenerateStaticReviewCreateError(t *testing.T) {
 	dir := t.TempDir()
 	outPath := dir + "/out"
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -3077,10 +3041,7 @@ func TestWebGenerateStaticCssWriteError(t *testing.T) {
 		t.Skip("cannot create symlink to /dev/full: " + err.Error())
 	}
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error from WriteStyleSheet on /dev/full")
 	}
@@ -3102,10 +3063,7 @@ func TestWebGenerateStaticRepoWriteError(t *testing.T) {
 		t.Skip("cannot create symlink to /dev/full: " + err.Error())
 	}
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error from WriteRepoTemplate on /dev/full")
 	}
@@ -3120,10 +3078,7 @@ func TestWebGenerateStaticBranchWriteError(t *testing.T) {
 	dir := t.TempDir()
 	outPath := dir + "/out"
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -3151,10 +3106,7 @@ func TestWebGenerateStaticReviewWriteError(t *testing.T) {
 	dir := t.TempDir()
 	outPath := dir + "/out"
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -3204,10 +3156,7 @@ func TestWebGenerateStaticMkdirError(t *testing.T) {
 		t.Fatal(err)
 	}
 	*outputDir = outPath
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
 		t.Error("expected error from os.Mkdir on file path")
 	}
@@ -3280,6 +3229,16 @@ func TestWebCmdRunMethodWithPort(t *testing.T) {
 			t.Error("expected error from webServe on already-bound port")
 		}
 	})
+}
+
+func TestWebCmdRunMethodWithPortUpdateError(t *testing.T) {
+	resetWebFlags()
+	defer resetWebFlags()
+	repo := errGetRepoStateHashRepo{repository.NewMockRepoForTest()}
+	err := webCmd.RunMethod(repo, []string{"-port", "12345"})
+	if err == nil {
+		t.Error("expected error from Update in webCmd with -port")
+	}
 }
 
 func TestDefaultJsonMarshalIndent(t *testing.T) {

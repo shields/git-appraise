@@ -205,10 +205,7 @@ func TestReposDiscoverGetwdError(t *testing.T) {
 func setupRepos(t *testing.T) *Repos {
 	t.Helper()
 	repo := repository.NewMockRepoForTest()
-	repoDetails, err := web.NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
 	}

@@ -49,18 +49,14 @@ func (oldRepos *Repos) Discover() error {
 			return err
 		}
 		if info.IsDir() {
-			path, err = filepath.Rel(cwd, path)
-			if err != nil {
-				return nil
-			}
+			// filepath.Rel cannot fail here: path comes from Walk(cwd, ...)
+			// so it is always relative to cwd.
+			path, _ = filepath.Rel(cwd, path)
 			gitRepo, err := repository.NewGitRepo(path)
 			if err != nil {
 				return nil
 			}
-			repoDetails, err := web.NewRepoDetails(gitRepo)
-			if err != nil {
-				return nil
-			}
+			repoDetails := web.NewRepoDetails(gitRepo)
 			if err := repoDetails.Update(); err != nil {
 				return nil
 			}

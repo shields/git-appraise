@@ -117,10 +117,7 @@ var webCmd = &Command{
 	RunMethod: func(repo repository.Repo, args []string) error {
 		webFlagSet.Parse(args)
 		args = webFlagSet.Args()
-		repoDetails, err := web.NewRepoDetails(repo)
-		if err != nil {
-			return err
-		}
+		repoDetails := web.NewRepoDetails(repo)
 		if *outputDir != "" {
 
 			if err := webGenerateStatic(repoDetails); err != nil {
@@ -128,6 +125,9 @@ var webCmd = &Command{
 			}
 		}
 		if *port != 0 {
+			if err := repoDetails.Update(); err != nil {
+				return err
+			}
 			if err := webServe(repoDetails); err != nil {
 				return err
 			}

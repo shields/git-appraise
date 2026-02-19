@@ -360,9 +360,11 @@ func PrintDetails(r *review.Review) error {
 	return nil
 }
 
+var getCommentsJSON = review.GetCommentsJSON
+
 // PrintCommentsJSON pretty prints the given review in JSON format.
 func PrintCommentsJSON(c []review.CommentThread) error {
-	json, err := review.GetCommentsJSON(c)
+	json, err := getCommentsJSON(c)
 	if err != nil {
 		return err
 	}
@@ -370,9 +372,13 @@ func PrintCommentsJSON(c []review.CommentThread) error {
 	return nil
 }
 
+var getReviewJSON = func(r *review.Review) (string, error) {
+	return r.GetJSON()
+}
+
 // PrintJSON pretty prints the given review in JSON format.
 func PrintJSON(r *review.Review) error {
-	json, err := r.GetJSON()
+	json, err := getReviewJSON(r)
 	if err != nil {
 		return err
 	}

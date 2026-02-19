@@ -2,6 +2,7 @@ package output
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -1090,6 +1091,41 @@ func TestShowThreadEndLineClamp(t *testing.T) {
 	}
 }
 
+func TestShowThreadFirstLineExceedsLastLine(t *testing.T) {
+	// changingShowRepo returns 3 lines on first call (showThread),
+	// 10 lines on second call (Check). With StartLine=3, EndLine=1:
+	// - Check sees 10 lines, passes for StartLine=3
+	// - showThread has 3 lines: StartLine(3) <= 3 → enters block
+	// - firstLine=3, lastLine=1 (non-zero, not clamped)
+	// - firstLine(3) > lastLine(1) → firstLine=1 (exercises line 152)
+	repo := &changingShowRepo{Repo: testMockRepo()}
+	thread := review.CommentThread{
+		Hash: "clamp2",
+		Comment: comment.Comment{
+			Timestamp:   "1000000000",
+			Author:      "reviewer",
+			Description: "firstline clamp",
+			Location: &comment.Location{
+				Commit: repository.TestCommitE,
+				Path:   "foo.txt",
+				Range: &comment.Range{
+					StartLine: 3,
+					EndLine:   1,
+				},
+			},
+		},
+	}
+	out := captureStdout(t, func() {
+		err := showThread(repo, thread, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "foo.txt") {
+		t.Errorf("expected file path in output, got %q", out)
+	}
+}
+
 func TestReflowTripleNewlines(t *testing.T) {
 	input := "first\n\n\nsecond"
 	got := Reflow(input, "", 80)
@@ -1114,5 +1150,29 @@ func TestReflowNewlineAfterSpace(t *testing.T) {
 	want := "hello world"
 	if got != want {
 		t.Errorf("Reflow(%q, %q, 80) =\n%q\nwant\n%q", input, "", got, want)
+	}
+}
+
+func TestPrintCommentsJSONError(t *testing.T) {
+	old := getCommentsJSON
+	t.Cleanup(func() { getCommentsJSON = old })
+	getCommentsJSON = func(cs []review.CommentThread) (string, error) {
+		return "", fmt.Errorf("injected json error")
+	}
+	err := PrintCommentsJSON(nil)
+	if err == nil {
+		t.Error("expected error from PrintCommentsJSON")
+	}
+}
+
+func TestPrintJSONError(t *testing.T) {
+	old := getReviewJSON
+	t.Cleanup(func() { getReviewJSON = old })
+	getReviewJSON = func(r *review.Review) (string, error) {
+		return "", fmt.Errorf("injected json error")
+	}
+	err := PrintJSON(&review.Review{})
+	if err == nil {
+		t.Error("expected error from PrintJSON")
 	}
 }

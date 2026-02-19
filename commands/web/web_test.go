@@ -162,10 +162,7 @@ func TestMdToHTMLSanitizesScript(t *testing.T) {
 
 func TestNewRepoDetails(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	if rd.Path == "" {
 		t.Error("expected non-empty Path")
 	}
@@ -176,10 +173,7 @@ func TestNewRepoDetails(t *testing.T) {
 
 func TestRepoDetailsUpdate(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -193,10 +187,7 @@ func TestRepoDetailsUpdate(t *testing.T) {
 
 func TestRepoDetailsUpdateIdempotent(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -212,10 +203,7 @@ func TestRepoDetailsUpdateIdempotent(t *testing.T) {
 
 func TestGetBranchDetails(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	bd := rd.GetBranchDetails("refs/heads/master")
 	if bd == nil {
 		t.Fatal("expected non-nil BranchDetails")
@@ -233,10 +221,7 @@ func TestGetBranchDetails(t *testing.T) {
 func setupRepoDetailsWithReviews(t *testing.T) *RepoDetails {
 	t.Helper()
 	repo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -922,10 +907,7 @@ func findReviewRevision(rd *RepoDetails) (string, string) {
 
 func TestWriteReviewTemplateGetCommitDetailsError(t *testing.T) {
 	baseRepo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(baseRepo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(baseRepo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -944,10 +926,7 @@ func TestWriteReviewTemplateGetCommitDetailsError(t *testing.T) {
 
 func TestWriteReviewTemplateGetCommitMessageError(t *testing.T) {
 	baseRepo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(baseRepo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(baseRepo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -966,10 +945,7 @@ func TestWriteReviewTemplateGetCommitMessageError(t *testing.T) {
 
 func TestWriteReviewTemplateParsedDiff1Error(t *testing.T) {
 	baseRepo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(baseRepo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(baseRepo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -1073,10 +1049,7 @@ func (r *abandonedReviewRepo) IsAncestor(ancestor, descendant string) (bool, err
 
 func TestUpdateWithAbandonedReview(t *testing.T) {
 	repo, abandonedCommit := newAbandonedReviewRepo()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -1112,10 +1085,7 @@ func TestWriteReviewTemplateCrossBranchNavigation(t *testing.T) {
 	// Set up a RepoDetails with multiple branches where navigating "next"
 	// from the last review on branch 0 crosses to branch 1.
 	repo := repository.NewMockRepoForTest()
-	rd, err := NewRepoDetails(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(repo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}
@@ -1701,10 +1671,7 @@ func TestServeReviewTemplateWithSuccessPath(t *testing.T) {
 		realCommit: realCommit,
 	}
 
-	rd, err := NewRepoDetails(mappedRepo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rd := NewRepoDetails(mappedRepo)
 	if err := rd.Update(); err != nil {
 		t.Fatal(err)
 	}

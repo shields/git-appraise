@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	exec "golang.org/x/sys/execabs"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -3345,6 +3346,20 @@ func TestGitRepoPullNotesAndArchiveMergeNotesCorrupt(t *testing.T) {
 	}
 }
 
+func TestGitRepoRunGitCommandWithEnvEmptyStderrDiffQuiet(t *testing.T) {
+	repo := setupTestRepo(t)
+	addCommit(t, repo, "change.txt", "new content\n", "second commit")
+	// "git diff --quiet HEAD~1 HEAD" returns exit code 1 (differences found)
+	// with empty stderr, triggering the fallback message on line 92-93.
+	_, err := repo.runGitCommandWithEnv(nil, "diff", "--quiet", "HEAD~1", "HEAD")
+	if err == nil {
+		t.Skip("diff --quiet did not return error; git version may differ")
+	}
+	if !strings.Contains(err.Error(), "Error running git command") {
+		t.Errorf("expected fallback error message, got: %v", err)
+	}
+}
+
 func TestGitRepoFetchAndReturnNewReviewHashesLsTreeFail(t *testing.T) {
 	// Trigger line 1217: ls-tree fails on a newly-fetched ref that points
 	// to a non-tree object (a blob).
@@ -3366,5 +3381,403 @@ func TestGitRepoFetchAndReturnNewReviewHashesLsTreeFail(t *testing.T) {
 	_, err := repo.FetchAndReturnNewReviewHashes("origin", "refs/notes/devtools/*")
 	if err == nil {
 		t.Fatal("expected error when fetched ref points to a non-tree object")
+	}
+}
+
+// --- Tests using execGitCommand hook for error injection ---
+
+func withExecHook(t *testing.T, hook func(cmd *exec.Cmd) error) {
+	t.Helper()
+	old := execGitCommand
+	t.Cleanup(func() { execGitCommand = old })
+	execGitCommand = hook
+}
+
+// setupNonAncestorRefs creates two refs on divergent branches (not ancestor/descendant).
+func setupNonAncestorRefs(t *testing.T, repo *GitRepo, refA, refB string) {
+	t.Helper()
+	addCommit(t, repo, "fork.txt", "fork point", "fork commit")
+	gitRun(t, repo.Path, "checkout", "-b", "side")
+	addCommit(t, repo, "side.txt", "side content", "side commit")
+	sideHash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "checkout", "main")
+	addCommit(t, repo, "main2.txt", "main content", "main commit")
+	mainHash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "update-ref", refA, mainHash)
+	gitRun(t, repo.Path, "update-ref", refB, sideHash)
+}
+
+func TestResolveRefCommitForEachRefError(t *testing.T) {
+	repo := setupTestRepo(t)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "for-each-ref" {
+			return fmt.Errorf("injected for-each-ref failure")
+		}
+		return cmd.Run()
+	})
+	_, err := repo.ResolveRefCommit("refs/heads/nonexistent")
+	if err == nil {
+		t.Error("expected error from ResolveRefCommit")
+	}
+}
+
+func TestGetCommitDetailsShowError(t *testing.T) {
+	repo := setupTestRepo(t)
+	showCount := 0
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show" {
+			showCount++
+			if showCount >= 2 {
+				return fmt.Errorf("injected show failure")
+			}
+		}
+		return cmd.Run()
+	})
+	_, err := repo.GetCommitDetails("HEAD")
+	if err == nil {
+		t.Error("expected error from GetCommitDetails")
+	}
+}
+
+func TestMergeArchivesGetCommitHashRemoteError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	archive := "refs/devtools/archives/reviews"
+	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
+	gitRun(t, repo.Path, "update-ref", remoteArchive, hash)
+
+	// GetCommitHash uses "git show -s --format=%H"; fail the first show call
+	showCount := 0
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show" {
+			showCount++
+			if showCount == 1 {
+				return fmt.Errorf("injected show failure")
+			}
+		}
+		return cmd.Run()
+	})
+	err := repo.mergeArchives(archive, remoteArchive)
+	if err == nil {
+		t.Error("expected error from mergeArchives")
+	}
+}
+
+func TestMergeArchivesHasRefLocalError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	archive := "refs/devtools/archives/reviews"
+	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
+	gitRun(t, repo.Path, "update-ref", remoteArchive, hash)
+
+	showRefCount := 0
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show-ref" {
+			showRefCount++
+			if showRefCount == 2 {
+				return fmt.Errorf("injected show-ref failure")
+			}
+		}
+		return cmd.Run()
+	})
+	err := repo.mergeArchives(archive, remoteArchive)
+	if err == nil {
+		t.Error("expected error from mergeArchives")
+	}
+}
+
+func TestMergeArchivesGetCommitHashLocalError(t *testing.T) {
+	repo := setupTestRepo(t)
+	archive := "refs/devtools/archives/reviews"
+	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
+	addCommit(t, repo, "a.txt", "a", "commit a")
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "update-ref", archive, hash)
+	gitRun(t, repo.Path, "update-ref", remoteArchive, hash)
+
+	// GetCommitHash uses "git show"; fail the 2nd show call (for local archive)
+	showCount := 0
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show" {
+			showCount++
+			if showCount == 2 {
+				return fmt.Errorf("injected show failure")
+			}
+		}
+		return cmd.Run()
+	})
+	err := repo.mergeArchives(archive, remoteArchive)
+	if err == nil {
+		t.Error("expected error from mergeArchives")
+	}
+}
+
+func TestMergeArchivesIsAncestorError(t *testing.T) {
+	repo := setupTestRepo(t)
+	archive := "refs/devtools/archives/reviews"
+	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
+	setupNonAncestorRefs(t, repo, archive, remoteArchive)
+
+	// IsAncestor returns error when merge-base fails with a non-ExitError
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "merge-base" {
+			return fmt.Errorf("injected merge-base failure")
+		}
+		return cmd.Run()
+	})
+	err := repo.mergeArchives(archive, remoteArchive)
+	if err == nil {
+		t.Error("expected error from mergeArchives")
+	}
+}
+
+func TestMergeArchivesGetCommitDetailsError(t *testing.T) {
+	repo := setupTestRepo(t)
+	archive := "refs/devtools/archives/reviews"
+	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
+	setupNonAncestorRefs(t, repo, archive, remoteArchive)
+
+	// GetCommitHash uses show (calls 1,2), GetCommitDetails uses show (call 3+)
+	showCount := 0
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show" {
+			showCount++
+			if showCount >= 3 {
+				return fmt.Errorf("injected show failure")
+			}
+		}
+		return cmd.Run()
+	})
+	err := repo.mergeArchives(archive, remoteArchive)
+	if err == nil {
+		t.Error("expected error from mergeArchives")
+	}
+}
+
+func TestMergeArchivesCommitTreeError(t *testing.T) {
+	repo := setupTestRepo(t)
+	archive := "refs/devtools/archives/reviews"
+	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
+	setupNonAncestorRefs(t, repo, archive, remoteArchive)
+
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "commit-tree" {
+			return fmt.Errorf("injected commit-tree failure")
+		}
+		return cmd.Run()
+	})
+	err := repo.mergeArchives(archive, remoteArchive)
+	if err == nil {
+		t.Error("expected error from mergeArchives")
+	}
+}
+
+func TestArchiveRefIsAncestorError(t *testing.T) {
+	repo := setupTestRepo(t)
+	archive := "refs/devtools/archives/test"
+	addCommit(t, repo, "a.txt", "a", "commit a")
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "update-ref", archive, hash)
+
+	// IsAncestor returns error when merge-base fails with a non-ExitError
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "merge-base" {
+			return fmt.Errorf("injected merge-base failure")
+		}
+		return cmd.Run()
+	})
+	err := repo.ArchiveRef("HEAD", archive)
+	if err == nil {
+		t.Error("expected error from ArchiveRef")
+	}
+}
+
+func TestArchiveRefCommitTreeError(t *testing.T) {
+	repo := setupTestRepo(t)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "commit-tree" {
+			return fmt.Errorf("injected commit-tree failure")
+		}
+		return cmd.Run()
+	})
+	err := repo.ArchiveRef("HEAD", "refs/devtools/archives/test")
+	if err == nil {
+		t.Error("expected error from ArchiveRef")
+	}
+}
+
+func TestReadTreeWithHashMalformedNoTab(t *testing.T) {
+	repo := setupTestRepo(t)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "ls-tree" {
+			fmt.Fprint(cmd.Stdout, "malformed_no_tab_line")
+			return nil
+		}
+		return cmd.Run()
+	})
+	_, err := repo.ReadTree("HEAD")
+	if err == nil {
+		t.Error("expected error from ReadTree")
+	}
+	if !strings.Contains(err.Error(), "malformed ls-tree output") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestReadTreeWithHashMalformedBadParts(t *testing.T) {
+	repo := setupTestRepo(t)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "ls-tree" {
+			fmt.Fprint(cmd.Stdout, "onlytwoparts hash\tfile.txt")
+			return nil
+		}
+		return cmd.Run()
+	})
+	_, err := repo.ReadTree("HEAD")
+	if err == nil {
+		t.Error("expected error from ReadTree")
+	}
+	if !strings.Contains(err.Error(), "malformed ls-tree output") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestNotesOverviewMalformedLine(t *testing.T) {
+	repo := setupTestRepo(t)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "notes" {
+			fmt.Fprint(cmd.Stdout, "malformed_no_space\n")
+			return nil
+		}
+		return cmd.Run()
+	})
+	_, err := repo.notesOverview("refs/notes/test")
+	if err == nil {
+		t.Error("expected error from notesOverview")
+	}
+	if !strings.Contains(err.Error(), "Malformed output line") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestNotesOverviewScannerError(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Write a line longer than bufio.Scanner's default 64KB buffer
+	longLine := strings.Repeat("x", 70000)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "notes" {
+			fmt.Fprint(cmd.Stdout, longLine+"\n")
+			return nil
+		}
+		return cmd.Run()
+	})
+	_, err := repo.notesOverview("refs/notes/test")
+	if err == nil {
+		t.Error("expected error from notesOverview")
+	}
+	if !strings.Contains(err.Error(), "Failure parsing") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGetAllNotesGetIsCommitMapCmdError(t *testing.T) {
+	repo := setupTestRepo(t)
+	addCommit(t, repo, "noted.txt", "content", "noted commit")
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "notes", "--ref=refs/notes/test", "add", "-m", "test note", hash)
+
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		for _, arg := range cmd.Args {
+			if strings.HasPrefix(arg, "--batch-check") {
+				return fmt.Errorf("injected cat-file batch-check failure")
+			}
+		}
+		return cmd.Run()
+	})
+	_, err := repo.GetAllNotes("refs/notes/test")
+	if err == nil {
+		t.Error("expected error from GetAllNotes")
+	}
+}
+
+func TestGetAllNotesGetIsCommitMapParseError(t *testing.T) {
+	repo := setupTestRepo(t)
+	addCommit(t, repo, "noted.txt", "content", "noted commit")
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "notes", "--ref=refs/notes/test", "add", "-m", "test note", hash)
+
+	old := parseBatchCheckOutput
+	t.Cleanup(func() { parseBatchCheckOutput = old })
+	parseBatchCheckOutput = func(r io.Reader) (map[string]bool, error) {
+		return nil, fmt.Errorf("injected parse error")
+	}
+	_, err := repo.GetAllNotes("refs/notes/test")
+	if err == nil {
+		t.Error("expected error from GetAllNotes")
+	}
+	if !strings.Contains(err.Error(), "Failure building the set of commit objects") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestGetAllNotesGetNoteContentsMapError(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Add a note so notesOverview produces output
+	addCommit(t, repo, "noted.txt", "content", "noted commit")
+	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
+	gitRun(t, repo.Path, "notes", "--ref=refs/notes/test", "add", "-m", "test note", hash)
+
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		for _, arg := range cmd.Args {
+			if strings.HasPrefix(arg, "--batch=") {
+				// Write malformed batch output (bad size field)
+				fmt.Fprint(cmd.Stdout, "objecthash\nnotanumber\n")
+				return nil
+			}
+		}
+		return cmd.Run()
+	})
+	_, err := repo.GetAllNotes("refs/notes/test")
+	if err == nil {
+		t.Error("expected error from GetAllNotes")
+	}
+}
+
+func TestGetRefHashesMalformedShowRef(t *testing.T) {
+	repo := setupTestRepo(t)
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show-ref" {
+			fmt.Fprint(cmd.Stdout, "malformed_no_space\n")
+			return nil
+		}
+		return cmd.Run()
+	})
+	_, err := repo.getRefHashes("refs/notes/*")
+	if err == nil {
+		t.Error("expected error from getRefHashes")
+	}
+	if !strings.Contains(err.Error(), "unexpected line") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestFetchAndReturnNewReviewHashesPostFetchGetRefHashesError(t *testing.T) {
+	repo, _ := setupTestRepoWithRemote(t)
+	showRefCount := 0
+	withExecHook(t, func(cmd *exec.Cmd) error {
+		if len(cmd.Args) > 1 && cmd.Args[1] == "show-ref" {
+			showRefCount++
+			if showRefCount == 2 {
+				return fmt.Errorf("injected show-ref failure")
+			}
+		}
+		return cmd.Run()
+	})
+	_, err := repo.FetchAndReturnNewReviewHashes("origin", "refs/notes/devtools/*")
+	if err == nil {
+		t.Error("expected error from FetchAndReturnNewReviewHashes")
+	}
+	if !strings.Contains(err.Error(), "updated ref hashes") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

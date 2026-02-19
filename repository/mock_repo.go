@@ -90,10 +90,7 @@ func (r *mockRepoForTest) createCommit(message, time, tree string, parents []str
 		Parents: parents,
 		Tree:    tree,
 	}
-	newCommitJSON, err := json.Marshal(newCommit)
-	if err != nil {
-		panic("unreachable: mockCommit marshal: " + err.Error())
-	}
+	newCommitJSON, _ := json.Marshal(newCommit)
 	newCommitHash := fmt.Sprintf("%x", sha1.Sum([]byte(newCommitJSON)))
 	r.Commits[newCommitHash] = newCommit
 	return newCommitHash
@@ -192,10 +189,7 @@ func (r *mockRepoForTest) GetDataDir() (string, error) { return "~/mockRepo/.git
 
 // GetRepoStateHash returns a hash which embodies the entire current state of a repository.
 func (r *mockRepoForTest) GetRepoStateHash() (string, error) {
-	repoJSON, err := json.Marshal(r)
-	if err != nil {
-		panic("unreachable: mockRepoForTest marshal: " + err.Error())
-	}
+	repoJSON, _ := json.Marshal(r)
 	return fmt.Sprintf("%x", sha1.Sum([]byte(repoJSON))), nil
 }
 
@@ -293,8 +287,15 @@ func (r *mockRepoForTest) ResolveRefCommit(ref string) (string, error) {
 }
 
 func (r *mockRepoForTest) getCommit(ref string) (mockCommit, error) {
-	commit, err := r.resolveLocalRef(ref)
-	return r.Commits[commit], err
+	commitHash, err := r.resolveLocalRef(ref)
+	if err != nil {
+		return mockCommit{}, err
+	}
+	commit, ok := r.Commits[commitHash]
+	if !ok {
+		return mockCommit{}, fmt.Errorf("unable to find commit %q", commitHash)
+	}
+	return commit, nil
 }
 
 // GetCommitMessage returns the message stored in the commit pointed to by the given ref.

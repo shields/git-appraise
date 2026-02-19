@@ -46,6 +46,13 @@ type GitRepo struct {
 	Path string
 }
 
+// execGitCommand is a test seam for injecting command execution failures.
+// Tests must not run in parallel when overriding this variable (Go test
+// packages run sequentially by default; t.Parallel is not used).
+var execGitCommand = func(cmd *exec.Cmd) error {
+	return cmd.Run()
+}
+
 // Run the given git command with the given I/O reader/writers and environment, returning an error if it fails.
 func (repo *GitRepo) runGitCommandWithIOAndEnv(stdin io.Reader, stdout, stderr io.Writer, env []string, args ...string) error {
 	cmd := exec.Command("git", args...)
@@ -54,7 +61,7 @@ func (repo *GitRepo) runGitCommandWithIOAndEnv(stdin io.Reader, stdout, stderr i
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.Env = env
-	return cmd.Run()
+	return execGitCommand(cmd)
 }
 
 // Run the given git command with the given I/O reader/writers, returning an error if it fails.
@@ -767,7 +774,7 @@ func stringsReader(s []*string) io.Reader {
 // the argument '--batch-check=%(objectname) %(objecttype)'.
 //
 // The return value is a map from object hash to a boolean indicating if that object is a commit.
-func splitBatchCheckOutput(out *bytes.Buffer) (map[string]bool, error) {
+func splitBatchCheckOutput(out io.Reader) (map[string]bool, error) {
 	isCommit := make(map[string]bool)
 	reader := bufio.NewReader(out)
 	for {
@@ -800,7 +807,7 @@ func splitBatchCheckOutput(out *bytes.Buffer) (map[string]bool, error) {
 //
 // To generate this format, make sure that the 'git cat-file' command includes
 // the argument '--batch=%(objectname)\n%(objectsize)'.
-func splitBatchCatFileOutput(out *bytes.Buffer) (map[string][]byte, error) {
+func splitBatchCatFileOutput(out io.Reader) (map[string][]byte, error) {
 	contentsMap := make(map[string][]byte)
 	reader := bufio.NewReader(out)
 	for {
@@ -888,8 +895,7 @@ func (repo *GitRepo) notesOverview(notesRef string) (*notesOverview, error) {
 		objHashes = append(objHashes, objHash)
 		notesHashes = append(notesHashes, notesHash)
 	}
-	err := outScanner.Err()
-	if err != nil && err != io.EOF {
+	if err := outScanner.Err(); err != nil {
 		return nil, fmt.Errorf("Failure parsing the output of 'git-notes list': %v", err)
 	}
 	return &notesOverview{
@@ -899,6 +905,8 @@ func (repo *GitRepo) notesOverview(notesRef string) (*notesOverview, error) {
 	}, nil
 }
 
+var parseBatchCheckOutput = splitBatchCheckOutput
+
 // getIsCommitMap returns a mapping of all the annotated objects that are commits.
 func (overview *notesOverview) getIsCommitMap(repo *GitRepo) (map[string]bool, error) {
 	var stdout bytes.Buffer
@@ -906,7 +914,7 @@ func (overview *notesOverview) getIsCommitMap(repo *GitRepo) (map[string]bool, e
 	if err := repo.runGitCommandWithIO(overview.ObjectHashesReader, &stdout, &stderr, "cat-file", "--batch-check=%(objectname) %(objecttype)"); err != nil {
 		return nil, fmt.Errorf("Failure performing a batch file check: %v", err)
 	}
-	isCommit, err := splitBatchCheckOutput(&stdout)
+	isCommit, err := parseBatchCheckOutput(&stdout)
 	if err != nil {
 		return nil, fmt.Errorf("Failure parsing the output of a batch file check: %v", err)
 	}
