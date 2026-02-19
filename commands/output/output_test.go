@@ -257,9 +257,7 @@ func TestShowSubThreadLGTM(t *testing.T) {
 		Resolved: boolPtr(true),
 	}
 	out := captureStdout(t, func() {
-		if err := showSubThread(testMockRepo(), thread, ""); err != nil {
-			t.Fatal(err)
-		}
+		showSubThread(testMockRepo(), thread, "")
 	})
 	if !strings.Contains(out, "lgtm") {
 		t.Errorf("expected 'lgtm' status, got %q", out)
@@ -277,9 +275,7 @@ func TestShowSubThreadNeedsWork(t *testing.T) {
 		Resolved: boolPtr(false),
 	}
 	out := captureStdout(t, func() {
-		if err := showSubThread(testMockRepo(), thread, ""); err != nil {
-			t.Fatal(err)
-		}
+		showSubThread(testMockRepo(), thread, "")
 	})
 	if !strings.Contains(out, "needs work") {
 		t.Errorf("expected 'needs work' status, got %q", out)
@@ -296,9 +292,7 @@ func TestShowSubThreadFYI(t *testing.T) {
 		},
 	}
 	out := captureStdout(t, func() {
-		if err := showSubThread(testMockRepo(), thread, ""); err != nil {
-			t.Fatal(err)
-		}
+		showSubThread(testMockRepo(), thread, "")
 	})
 	if !strings.Contains(out, "fyi") {
 		t.Errorf("expected 'fyi' status, got %q", out)
@@ -325,9 +319,7 @@ func TestShowSubThreadWithChildren(t *testing.T) {
 		},
 	}
 	out := captureStdout(t, func() {
-		if err := showSubThread(testMockRepo(), thread, ""); err != nil {
-			t.Fatal(err)
-		}
+		showSubThread(testMockRepo(), thread, "")
 	})
 	if !strings.Contains(out, "parent comment") {
 		t.Errorf("expected parent description, got %q", out)
@@ -1049,6 +1041,54 @@ func TestPrintInlineCommentsParsedDiff1Error(t *testing.T) {
 }
 
 // --- Reflow edge cases ---
+
+// changingShowRepo returns multi-line content on even calls and single-line on
+// odd calls. This exercises the code path where showThread's initial Show
+// returns fewer lines than Check's subsequent Show call accepts, causing
+// lastLine > len(lines) on line 149.
+type changingShowRepo struct {
+	repository.Repo
+	callCount int
+}
+
+func (r *changingShowRepo) Show(commit, path string) (string, error) {
+	r.callCount++
+	if r.callCount%2 == 1 {
+		// First call (from showThread): return 3 lines
+		return "line1\nline2\nline3", nil
+	}
+	// Second call (from Check): return 10 lines so Check passes for EndLine=5
+	return "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10", nil
+}
+
+func TestShowThreadEndLineClamp(t *testing.T) {
+	repo := &changingShowRepo{Repo: testMockRepo()}
+	thread := review.CommentThread{
+		Hash: "clamp1",
+		Comment: comment.Comment{
+			Timestamp:   "1000000000",
+			Author:      "reviewer",
+			Description: "endline clamp",
+			Location: &comment.Location{
+				Commit: repository.TestCommitE,
+				Path:   "foo.txt",
+				Range: &comment.Range{
+					StartLine: 1,
+					EndLine:   5,
+				},
+			},
+		},
+	}
+	out := captureStdout(t, func() {
+		err := showThread(repo, thread, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "foo.txt") {
+		t.Errorf("expected file path in output, got %q", out)
+	}
+}
 
 func TestReflowTripleNewlines(t *testing.T) {
 	input := "first\n\n\nsecond"

@@ -149,6 +149,9 @@ func showThread(repo repository.Repo, thread review.CommentThread, indent string
 			if lastLine > uint32(len(lines)) {
 				lastLine = uint32(len(lines))
 			}
+			if firstLine > lastLine {
+				firstLine = lastLine
+			}
 
 			if lastLine == firstLine {
 				minLine := int(lastLine) - int(contextLineCount)
@@ -162,11 +165,12 @@ func showThread(repo repository.Repo, thread review.CommentThread, indent string
 			fmt.Println(indent + "|" + strings.Join(lines[firstLine-1:lastLine], "\n"+indent+"|"))
 		}
 	}
-	return showSubThread(repo, thread, indent)
+	showSubThread(repo, thread, indent)
+	return nil
 }
 
 // showSubThread prints the given comment (sub)thread, indented by the given prefix string.
-func showSubThread(repo repository.Repo, thread review.CommentThread, indent string) error {
+func showSubThread(repo repository.Repo, thread review.CommentThread, indent string) {
 	statusString := "fyi"
 	if thread.Resolved != nil {
 		if *thread.Resolved {
@@ -184,11 +188,8 @@ func showSubThread(repo repository.Repo, thread review.CommentThread, indent str
 	fmt.Println(indentedSummary)
 	fmt.Println(indentedDescription)
 	for _, child := range thread.Children {
-		if err := showSubThread(repo, child, indent); err != nil {
-			return err
-		}
+		showSubThread(repo, child, indent)
 	}
-	return nil
 }
 
 // printAnalyses prints the static analysis results for the latest commit in the review.
