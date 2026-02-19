@@ -82,6 +82,15 @@ func LaunchEditor(repo repository.Repo, fileName string) (string, error) {
 // through, much like git, it will read from stdin. This can be piped data,
 // unless there is a tty in which case the user will be prompted to enter a
 // message.
+// Test seams for OS interactions; not safe for t.Parallel().
+var readAllStdin = func() ([]byte, error) {
+	return io.ReadAll(os.Stdin)
+}
+
+var newTTYScanner = func() *bufio.Scanner {
+	return bufio.NewScanner(os.Stdin)
+}
+
 func FromFile(fileName string) (string, error) {
 	if fileName == "-" {
 		stat, err := os.Stdin.Stat()
@@ -89,8 +98,7 @@ func FromFile(fileName string) (string, error) {
 			return "", fmt.Errorf("Error reading from stdin: %v\n", err)
 		}
 		if (stat.Mode() & os.ModeCharDevice) == 0 {
-			// There is no tty. This will allow us to read piped data instead.
-			output, err := io.ReadAll(os.Stdin)
+			output, err := readAllStdin()
 			if err != nil {
 				return "", fmt.Errorf("Error reading from stdin: %v\n", err)
 			}
@@ -99,10 +107,13 @@ func FromFile(fileName string) (string, error) {
 
 		fmt.Printf("(reading comment from standard input)\n")
 		var output bytes.Buffer
-		s := bufio.NewScanner(os.Stdin)
+		s := newTTYScanner()
 		for s.Scan() {
 			output.Write(s.Bytes())
 			output.WriteRune('\n')
+		}
+		if err := s.Err(); err != nil {
+			return "", fmt.Errorf("Error reading from stdin: %v\n", err)
 		}
 		return output.String(), nil
 	}
@@ -114,7 +125,10 @@ func FromFile(fileName string) (string, error) {
 	return string(output), err
 }
 
-func startInlineCommand(command string, args ...string) (*exec.Cmd, error) {
+// Test seam for exec; not safe for t.Parallel().
+var startInlineCommand = startInlineCommandImpl
+
+func startInlineCommandImpl(command string, args ...string) (*exec.Cmd, error) {
 	cmd := exec.Command(command, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

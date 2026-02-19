@@ -5,11 +5,13 @@
 package input
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	exec "golang.org/x/sys/execabs"
 	"msrl.dev/git-appraise/repository"
 )
 
@@ -204,7 +206,7 @@ func TestLaunchEditorNoOutputFile(t *testing.T) {
 }
 
 func TestStartInlineCommand(t *testing.T) {
-	cmd, err := startInlineCommand("true")
+	cmd, err := startInlineCommandImpl("true")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,8 +216,213 @@ func TestStartInlineCommand(t *testing.T) {
 }
 
 func TestStartInlineCommandBadBinary(t *testing.T) {
-	_, err := startInlineCommand("/nonexistent/binary")
+	_, err := startInlineCommandImpl("/nonexistent/binary")
 	if err == nil {
 		t.Error("expected error for nonexistent binary")
+	}
+}
+
+// --- LaunchEditor sh fallback and total failure ---
+
+func TestLaunchEditorShFallback(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "test-editor.sh",
+		"#!/bin/sh\necho 'sh fallback' > \"$1\"\n")
+
+	callCount := 0
+	orig := startInlineCommand
+	defer func() { startInlineCommand = orig }()
+	startInlineCommand = func(command string, args ...string) (*exec.Cmd, error) {
+		callCount++
+		switch callCount {
+		case 1:
+			// Direct editor invocation: fail
+			return nil, fmt.Errorf("direct exec failed")
+		case 2:
+			// bash fallback: fail
+			return nil, fmt.Errorf("bash not found")
+		default:
+			// sh fallback: succeed
+			return startInlineCommandImpl(command, args...)
+		}
+	}
+
+	repo := editorRepo{
+		Repo:    repository.NewMockRepoForTest(),
+		editor:  fmt.Sprintf("sh %q", script),
+		dataDir: dir,
+	}
+
+	got, err := LaunchEditor(repo, "COMMENT_EDITMSG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "sh fallback\n" {
+		t.Errorf("LaunchEditor = %q, want %q", got, "sh fallback\n")
+	}
+}
+
+func TestLaunchEditorAllFallbacksFail(t *testing.T) {
+	dir := t.TempDir()
+
+	orig := startInlineCommand
+	defer func() { startInlineCommand = orig }()
+	startInlineCommand = func(command string, args ...string) (*exec.Cmd, error) {
+		return nil, fmt.Errorf("all commands fail")
+	}
+
+	repo := editorRepo{
+		Repo:    repository.NewMockRepoForTest(),
+		editor:  "/nonexistent/editor",
+		dataDir: dir,
+	}
+
+	_, err := LaunchEditor(repo, "COMMENT_EDITMSG")
+	if err == nil {
+		t.Error("expected error when all fallbacks fail")
+	}
+}
+
+// --- FromFile stdin Stat error ---
+
+func TestFromFileStdinStatError(t *testing.T) {
+	// Create a pipe and close the read end, then replace os.Stdin with it
+	r, _, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Close() // Close it so Stat fails
+
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	_, err = FromFile("-")
+	if err == nil {
+		t.Error("expected error from FromFile with closed stdin")
+	}
+}
+
+// --- FromFile stdin ReadAll error ---
+
+func TestFromFileStdinReadError(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	w.Close()
+
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	origReadAll := readAllStdin
+	defer func() { readAllStdin = origReadAll }()
+	readAllStdin = func() ([]byte, error) {
+		return nil, fmt.Errorf("simulated read error")
+	}
+
+	_, err = FromFile("-")
+	if err == nil {
+		t.Error("expected error from FromFile with failing ReadAll")
+	}
+}
+
+// --- FromFile TTY interactive path ---
+
+func TestFromFileStdinTTY(t *testing.T) {
+	// /dev/null is a character device on Linux that returns EOF immediately.
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skip("cannot open /dev/null: " + err.Error())
+	}
+	defer devNull.Close()
+
+	stat, err := devNull.Stat()
+	if err != nil {
+		t.Skip("cannot stat /dev/null")
+	}
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		t.Skip("/dev/null is not a character device on this platform")
+	}
+
+	old := os.Stdin
+	os.Stdin = devNull
+	defer func() { os.Stdin = old }()
+
+	oldStdout := os.Stdout
+	devNull2, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull2.Close()
+	os.Stdout = devNull2
+	defer func() { os.Stdout = oldStdout }()
+
+	got, err := FromFile("-")
+	if err != nil {
+		t.Fatalf("FromFile('-') error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("FromFile('-') = %q, want empty string", got)
+	}
+}
+
+func TestFromFileStdinTTYWithData(t *testing.T) {
+	// /dev/null is a character device, so Stat reports ModeCharDevice,
+	// triggering the TTY/scanner path in FromFile.
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skip("cannot open /dev/null: " + err.Error())
+	}
+	defer devNull.Close()
+
+	stat, err := devNull.Stat()
+	if err != nil {
+		t.Skip("cannot stat /dev/null")
+	}
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		t.Skip("/dev/null is not a character device on this platform")
+	}
+
+	old := os.Stdin
+	os.Stdin = devNull
+	defer func() { os.Stdin = old }()
+
+	oldStdout := os.Stdout
+	devNull2, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull2.Close()
+	os.Stdout = devNull2
+	defer func() { os.Stdout = oldStdout }()
+
+	// Override newTTYScanner to provide a scanner backed by a pipe with data,
+	// so the scanner loop body (lines 106-109) is exercised.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	origScanner := newTTYScanner
+	defer func() { newTTYScanner = origScanner }()
+	newTTYScanner = func() *bufio.Scanner {
+		return bufio.NewScanner(r)
+	}
+
+	go func() {
+		defer w.Close()
+		w.WriteString("hello from tty\nsecond line\n")
+	}()
+
+	got, err := FromFile("-")
+	if err != nil {
+		t.Fatalf("FromFile('-') error: %v", err)
+	}
+	if got != "hello from tty\nsecond line\n" {
+		t.Errorf("FromFile('-') = %q, want %q", got, "hello from tty\nsecond line\n")
 	}
 }
