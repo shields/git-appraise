@@ -1,0 +1,24 @@
+pre-commit:
+  parallel: true
+  commands:
+    gofmt:
+      glob: "*.go"
+      run: test -z "$(gofmt -l {staged_files})"
+    go-vet:
+      glob: "*.go"
+      run: go vet ./...
+    go-fix:
+      glob: "*.go"
+      run: test -z "$(go fix -diff ./...)" || { echo "Run 'go fix ./...' to apply fixes"; exit 1; }
+    go-build:
+      glob: "*.go"
+      run: go build ./...
+
+pre-push:
+  commands:
+    test-coverage:
+      glob: "*.go"
+      run: >-
+        go test -coverprofile=coverage.out -count=1 ./... &&
+        go tool cover -func=coverage.out |
+        awk '/^total:/ { if ($3 != "100.0%") { print "Coverage is " $3 ", expected 100.0%"; exit 1 } }'
