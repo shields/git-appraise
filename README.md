@@ -1,16 +1,8 @@
-# Note about this fork
-
-This branch of this fork is slightly diverging from the upstream
-[https://github.com/google/git-appraise](https://github.com/google/git-appraise)
-as I have made modifications to it for the purpose of my experimental book
-[kovirobi.github.io/secret-chord](https://kovirobi.github.io/secret-chord), head over
-there to have a look at it.
-
 # Distributed Code Review For Git
-[![Build Status](https://travis-ci.org/google/git-appraise.svg?branch=master)](https://travis-ci.org/google/git-appraise)
 
 This repo contains a command line tool for performing code reviews on git
-repositories.
+repositories. It is a fork of
+[google/git-appraise](https://github.com/google/git-appraise).
 
 ## Overview
 
@@ -30,7 +22,7 @@ is installing the client on your workstation.
 Assuming you have the [Go tools installed](https://golang.org/doc/install), run
 the following command:
 
-    go install github.com/google/git-appraise/git-appraise@latest
+    go install msrl.dev/git-appraise/git-appraise@latest
 
 Then, either make sure that `${GOPATH}/bin` is in your PATH, or explicitly add the
 "appraise" git alias by running the following command.
@@ -144,7 +136,7 @@ annotate the first revision in the review. They must conform to the
 
 ### Libraries
 
-  - [Go (use git-appraise itself)](https://github.com/google/git-appraise/blob/master/review/review.go)
+  - [Go (use git-appraise itself)](https://github.com/shields/git-appraise/blob/master/review/review.go)
   - [Rust](https://github.com/Nemo157/git-appraise-rs)
 
 ### Graphical User Interfaces
