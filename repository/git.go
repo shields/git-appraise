@@ -1041,21 +1041,8 @@ func (repo *GitRepo) SetRef(ref, newCommitHash, previousCommitHash string) error
 // readNotesTree resolves a notes ref to the commit's tree.
 // Returns nil, nil if the ref doesn't exist.
 func (repo *GitRepo) readNotesTree(notesRef string) (*object.Tree, error) {
-	if repo.gogit == nil {
-		return nil, errNotInitialized
-	}
-	// ResolveRevision handles annotated tags: it tries CommitObject first,
-	// then falls back to TagObject → Commit() to peel to the underlying
-	// commit (see go-git repository.go ResolveRevision).
-	h, err := repo.gogit.ResolveRevision(plumbing.Revision(notesRef))
-	if err == plumbing.ErrReferenceNotFound {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	c, err := repo.gogit.CommitObject(*h)
-	if err != nil {
+	c, err := repo.readNotesCommit(notesRef)
+	if err != nil || c == nil {
 		return nil, err
 	}
 	return c.Tree()
@@ -1194,10 +1181,220 @@ func (repo *GitRepo) GetAllNotes(notesRef string) (map[string][]Note, error) {
 	return commitNotesMap, nil
 }
 
+// readNotesCommit resolves a notes ref to its commit object.
+// Returns nil, nil if the ref doesn't exist.
+func (repo *GitRepo) readNotesCommit(notesRef string) (*object.Commit, error) {
+	if repo.gogit == nil {
+		return nil, errNotInitialized
+	}
+	h, err := repo.gogit.ResolveRevision(plumbing.Revision(notesRef))
+	if err == plumbing.ErrReferenceNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return repo.gogit.CommitObject(*h)
+}
+
+// notesSignature returns a Signature for notes commits from git config.
+func (repo *GitRepo) notesSignature() object.Signature {
+	sig := object.Signature{When: time.Now()}
+	cfg, err := repo.gogit.ConfigScoped(config.SystemScope)
+	if err == nil {
+		sig.Name = cfg.User.Name
+		sig.Email = cfg.User.Email
+	}
+	return sig
+}
+
+// detectFanout checks if a notes tree uses fan-out by looking for directory
+// entries. Returns true if any entry is a directory.
+func detectFanout(tree *object.Tree) bool {
+	for _, entry := range tree.Entries {
+		if entry.Mode == filemode.Dir {
+			return true
+		}
+	}
+	return false
+}
+
+// buildNotesTree creates a new notes tree with the given entry added or
+// replaced. It preserves the existing tree's fan-out layout.
+func (repo *GitRepo) buildNotesTree(existing *object.Tree, revision string, blobHash plumbing.Hash) (plumbing.Hash, error) {
+	var entries []object.TreeEntry
+	entryName := revision
+	fanout := existing != nil && detectFanout(existing)
+	if fanout {
+		entryName = revision[:2] + "/" + revision[2:]
+	}
+
+	if existing != nil {
+		for _, e := range existing.Entries {
+			if e.Mode == filemode.Dir && fanout {
+				// Rebuild subtree if it might contain the target entry.
+				if e.Name == revision[:2] {
+					subtree, err := existing.Tree(e.Name)
+					if err != nil {
+						return plumbing.ZeroHash, err
+					}
+					newSubEntries := make([]object.TreeEntry, 0, len(subtree.Entries))
+					for _, se := range subtree.Entries {
+						if se.Name != revision[2:] {
+							newSubEntries = append(newSubEntries, se)
+						}
+					}
+					newSubEntries = append(newSubEntries, object.TreeEntry{
+						Name: revision[2:],
+						Mode: filemode.Regular,
+						Hash: blobHash,
+					})
+					sort.Sort(object.TreeEntrySorter(newSubEntries))
+					subTree := &object.Tree{Entries: newSubEntries}
+					obj := repo.gogit.Storer.NewEncodedObject()
+					if err := subTree.Encode(obj); err != nil {
+						return plumbing.ZeroHash, err
+					}
+					h, err := storeObject(repo, obj)
+					if err != nil {
+						return plumbing.ZeroHash, err
+					}
+					entries = append(entries, object.TreeEntry{
+						Name: e.Name,
+						Mode: filemode.Dir,
+						Hash: h,
+					})
+					continue
+				}
+				entries = append(entries, e)
+			} else if e.Name != revision {
+				entries = append(entries, e)
+			}
+		}
+	}
+
+	if fanout {
+		// Check if we already added the subtree above.
+		found := false
+		for _, e := range entries {
+			if e.Name == revision[:2] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Create new subtree for this fan-out prefix.
+			subEntries := []object.TreeEntry{{
+				Name: revision[2:],
+				Mode: filemode.Regular,
+				Hash: blobHash,
+			}}
+			subTree := &object.Tree{Entries: subEntries}
+			obj := repo.gogit.Storer.NewEncodedObject()
+			if err := subTree.Encode(obj); err != nil {
+				return plumbing.ZeroHash, err
+			}
+			h, err := storeObject(repo, obj)
+			if err != nil {
+				return plumbing.ZeroHash, err
+			}
+			entries = append(entries, object.TreeEntry{
+				Name: revision[:2],
+				Mode: filemode.Dir,
+				Hash: h,
+			})
+		}
+	} else {
+		entries = append(entries, object.TreeEntry{
+			Name: entryName,
+			Mode: filemode.Regular,
+			Hash: blobHash,
+		})
+	}
+
+	sort.Sort(object.TreeEntrySorter(entries))
+	t := &object.Tree{Entries: entries}
+	obj := repo.gogit.Storer.NewEncodedObject()
+	if err := t.Encode(obj); err != nil {
+		return plumbing.ZeroHash, err
+	}
+	return storeObject(repo, obj)
+}
+
 // AppendNote appends a note to a revision under the given ref.
 func (repo *GitRepo) AppendNote(notesRef, revision string, note Note) error {
-	_, err := repo.runGitCommand("notes", "--ref", notesRef, "append", "-m", string(note), revision)
-	return err
+	if repo.gogit == nil {
+		return errNotInitialized
+	}
+
+	// Get existing notes commit and tree (may be nil if ref doesn't exist).
+	parentCommit, err := repo.readNotesCommit(notesRef)
+	if err != nil {
+		return err
+	}
+
+	var existingTree *object.Tree
+	if parentCommit != nil {
+		existingTree, err = parentCommit.Tree()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Read existing note content for this revision, if any.
+	var newContent string
+	if existingTree != nil {
+		entry, err := lookupNoteEntry(existingTree, revision)
+		if err == nil {
+			existing, err := repo.readBlobContents(entry.Hash)
+			if err == nil && existing != "" {
+				newContent = strings.TrimRight(existing, "\n") + "\n"
+			}
+		}
+	}
+	newContent += string(note) + "\n"
+
+	// Store the new blob.
+	blobHashStr, err := repo.StoreBlob(newContent)
+	if err != nil {
+		return err
+	}
+	blobHash := plumbing.NewHash(blobHashStr)
+
+	// Build the updated notes tree.
+	treeHash, err := repo.buildNotesTree(existingTree, revision, blobHash)
+	if err != nil {
+		return err
+	}
+
+	// Create notes commit.
+	sig := repo.notesSignature()
+	var parentHashes []plumbing.Hash
+	if parentCommit != nil {
+		parentHashes = []plumbing.Hash{parentCommit.Hash}
+	}
+	c := &object.Commit{
+		Author:       sig,
+		Committer:    sig,
+		Message:      "Notes added by 'git notes append'\n",
+		TreeHash:     treeHash,
+		ParentHashes: parentHashes,
+	}
+	obj := repo.gogit.Storer.NewEncodedObject()
+	if err := c.Encode(obj); err != nil {
+		return err
+	}
+	commitHash, err := storeObject(repo, obj)
+	if err != nil {
+		return err
+	}
+
+	// Update the notes ref.
+	var previousHash string
+	if parentCommit != nil {
+		previousHash = parentCommit.Hash.String()
+	}
+	return repo.SetRef(notesRef, commitHash.String(), previousHash)
 }
 
 // ListNotedRevisions returns the collection of revisions that are annotated by notes in the given ref.
