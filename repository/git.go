@@ -1763,6 +1763,65 @@ func (repo *GitRepo) MergeArchives(remote, archiveRefPattern string) error {
 	return nil
 }
 
+// listTreeEntryNames returns all file paths in the tree of the commit
+// identified by the given hash, equivalent to `git ls-tree -r --name-only`.
+func (repo *GitRepo) listTreeEntryNames(commitHash string) ([]string, error) {
+	c, err := repo.gogit.CommitObject(plumbing.NewHash(commitHash))
+	if err != nil {
+		return nil, err
+	}
+	tree, err := c.Tree()
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	iter := tree.Files()
+	iter.ForEach(func(f *object.File) error {
+		names = append(names, f.Name)
+		return nil
+	})
+	return names, nil
+}
+
+// diffTreeNames returns the names of files that differ between the trees of
+// two commits, equivalent to `git diff --name-only`.
+func (repo *GitRepo) diffTreeNames(fromHash, toHash string) ([]string, error) {
+	fromCommit, err := repo.gogit.CommitObject(plumbing.NewHash(fromHash))
+	if err != nil {
+		return nil, err
+	}
+	toCommit, err := repo.gogit.CommitObject(plumbing.NewHash(toHash))
+	if err != nil {
+		return nil, err
+	}
+	fromTree, err := fromCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	toTree, err := toCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	changes, err := fromTree.Diff(toTree)
+	if err != nil {
+		return nil, err
+	}
+	nameSet := make(map[string]struct{})
+	for _, change := range changes {
+		if change.From.Name != "" {
+			nameSet[change.From.Name] = struct{}{}
+		}
+		if change.To.Name != "" {
+			nameSet[change.To.Name] = struct{}{}
+		}
+	}
+	names := make([]string, 0, len(nameSet))
+	for name := range nameSet {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 // FetchAndReturnNewReviewHashes fetches the notes "branches" and then susses
 // out the IDs (the revision the review points to) of any new reviews, then
 // returns that list of IDs.
@@ -1803,21 +1862,18 @@ func (repo *GitRepo) FetchAndReturnNewReviewHashes(remote, notesRefPattern strin
 		if priorHash == hash {
 			continue
 		}
-		var notes string
-		var err error
+		var names []string
 		if !ok {
-			// This is a new ref, so include every noted object
-			notes, err = repo.runGitCommand("ls-tree", "-r", "--name-only", hash)
+			names, err = repo.listTreeEntryNames(hash)
 		} else {
-			notes, err = repo.runGitCommand("diff", "--name-only", priorHash, hash)
+			names, err = repo.diffTreeNames(priorHash, hash)
 		}
 		if err != nil {
 			return nil, err
 		}
-		// The name of the review matches the name of the notes tree entry, with slashes removed
-		reviews := strings.SplitSeq(strings.Replace(notes, "/", "", -1), "\n")
-		for review := range reviews {
-			updatedReviewSet[review] = struct{}{}
+		for _, name := range names {
+			// Remove slashes to flatten fan-out paths into full hashes.
+			updatedReviewSet[strings.ReplaceAll(name, "/", "")] = struct{}{}
 		}
 	}
 
