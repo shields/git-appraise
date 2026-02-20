@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -873,96 +872,5 @@ func TestMockRepoArchiveRefCreateCommitSuccess(t *testing.T) {
 	has, _ := repo.HasRef(archive)
 	if !has {
 		t.Fatal("expected archive ref to exist")
-	}
-}
-
-// errAfterReader returns data for the first N bytes, then returns an error.
-type errAfterReader struct {
-	data []byte
-	pos  int
-	err  error
-}
-
-func (r *errAfterReader) Read(p []byte) (int, error) {
-	if r.pos >= len(r.data) {
-		return 0, r.err
-	}
-	n := copy(p, r.data[r.pos:])
-	r.pos += n
-	if r.pos >= len(r.data) {
-		return n, r.err
-	}
-	return n, nil
-}
-
-func TestSplitBatchCheckOutputNameReadError(t *testing.T) {
-	// Provide partial data followed by a non-EOF error on the name line read.
-	r := &errAfterReader{
-		data: []byte("abc"),
-		err:  errors.New("injected read error"),
-	}
-	_, err := splitBatchCheckOutput(r)
-	if err == nil {
-		t.Fatal("expected error from splitBatchCheckOutput")
-	}
-	if !strings.Contains(err.Error(), "reading the next object name") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestSplitBatchCheckOutputTypeNonEOFError(t *testing.T) {
-	// Provide a valid name line (ending with space), then non-EOF error on the type line.
-	r := &errAfterReader{
-		data: []byte("abc123 "),
-		err:  errors.New("injected type error"),
-	}
-	_, err := splitBatchCheckOutput(r)
-	if err == nil {
-		t.Fatal("expected error from splitBatchCheckOutput")
-	}
-	if !strings.Contains(err.Error(), "reading the next object type") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestSplitBatchCatFileOutputNameReadError(t *testing.T) {
-	// Provide partial data that fails during the name line read.
-	r := &errAfterReader{
-		data: []byte("abc"),
-		err:  errors.New("injected name error"),
-	}
-	_, err := splitBatchCatFileOutput(r)
-	if err == nil {
-		t.Fatal("expected error from splitBatchCatFileOutput")
-	}
-	if !strings.Contains(err.Error(), "reading the next object name") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestSplitBatchCatFileOutputSizeReadError(t *testing.T) {
-	// Provide a valid name line (ending with newline), then error on size line.
-	r := &errAfterReader{
-		data: []byte("abc123\n"),
-		err:  errors.New("injected size error"),
-	}
-	_, err := splitBatchCatFileOutput(r)
-	if err == nil {
-		t.Fatal("expected error from splitBatchCatFileOutput")
-	}
-	if !strings.Contains(err.Error(), "reading the next object size") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestSplitBatchCatFileOutputContentReadError(t *testing.T) {
-	// Provide name + size, then error during content read.
-	r := &errAfterReader{
-		data: []byte("abc123\n5\nhe"),
-		err:  errors.New("injected content error"),
-	}
-	_, err := splitBatchCatFileOutput(r)
-	if err == nil {
-		t.Fatal("expected error during content read")
 	}
 }

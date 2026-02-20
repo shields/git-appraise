@@ -18,7 +18,6 @@ limitations under the License.
 package repository
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha1"
 	"fmt"
@@ -1039,256 +1038,159 @@ func (repo *GitRepo) SetRef(ref, newCommitHash, previousCommitHash string) error
 	return repo.gogit.Storer.SetReference(newRef)
 }
 
-// GetNotes uses the "git" command-line tool to read the notes from the given ref for a given revision.
-func (repo *GitRepo) GetNotes(notesRef, revision string) []Note {
-	var notes []Note
-	rawNotes, err := repo.runGitCommand("notes", "--ref", notesRef, "show", revision, "--")
-	if err != nil {
-		// We just assume that this means there are no notes
-		return nil
+// readNotesTree resolves a notes ref to the commit's tree.
+// Returns nil, nil if the ref doesn't exist.
+func (repo *GitRepo) readNotesTree(notesRef string) (*object.Tree, error) {
+	if repo.gogit == nil {
+		return nil, errNotInitialized
 	}
-	for line := range strings.SplitSeq(rawNotes, "\n") {
+	// ResolveRevision handles annotated tags: it tries CommitObject first,
+	// then falls back to TagObject → Commit() to peel to the underlying
+	// commit (see go-git repository.go ResolveRevision).
+	h, err := repo.gogit.ResolveRevision(plumbing.Revision(notesRef))
+	if err == plumbing.ErrReferenceNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	c, err := repo.gogit.CommitObject(*h)
+	if err != nil {
+		return nil, err
+	}
+	return c.Tree()
+}
+
+type notesEntry struct {
+	ObjectHash string
+	BlobHash   plumbing.Hash
+}
+
+// collectNotesEntries collects (annotatedObjectHash, blobHash) pairs from a
+// notes tree, handling both flat and fan-out (2-char directory prefix) layouts.
+func collectNotesEntries(tree *object.Tree, prefix string) ([]notesEntry, error) {
+	var entries []notesEntry
+	for _, entry := range tree.Entries {
+		if entry.Mode == filemode.Dir {
+			subtree, err := tree.Tree(entry.Name)
+			if err != nil {
+				return nil, fmt.Errorf("reading subtree %s%s: %w", prefix, entry.Name, err)
+			}
+			sub, err := collectNotesEntries(subtree, prefix+entry.Name)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, sub...)
+		} else {
+			entries = append(entries, notesEntry{prefix + entry.Name, entry.Hash})
+		}
+	}
+	return entries, nil
+}
+
+// readBlobContents reads a blob and returns its content as a string.
+func (repo *GitRepo) readBlobContents(h plumbing.Hash) (string, error) {
+	obj, err := repo.gogit.BlobObject(h)
+	if err != nil {
+		return "", err
+	}
+	r, err := obj.Reader()
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// splitNotesBlob splits a notes blob's content into individual Note values,
+// matching the behavior of `git notes show` (which trims trailing whitespace).
+func splitNotesBlob(contents string) []Note {
+	contents = strings.TrimRight(contents, "\n")
+	var notes []Note
+	for line := range strings.SplitSeq(contents, "\n") {
 		notes = append(notes, Note([]byte(line)))
 	}
 	return notes
 }
 
-func stringsReader(s []*string) io.Reader {
-	var subReaders []io.Reader
-	for _, strPtr := range s {
-		subReader := strings.NewReader(*strPtr)
-		subReaders = append(subReaders, subReader, strings.NewReader("\n"))
+// lookupNoteEntry looks up the notes tree entry for the given revision hash,
+// handling arbitrary fan-out depth. Git notes fan-out always splits at byte
+// boundaries (2 hex chars per level), so entries are either flat or nested in
+// 2-char directory segments (e.g. "ab/cdef..." or "ab/cd/ef01...").
+func lookupNoteEntry(tree *object.Tree, remaining string) (*object.TreeEntry, error) {
+	// Try direct entry at this level (handles flat layout and leaf of fan-out).
+	entry, err := tree.FindEntry(remaining)
+	if err == nil {
+		return entry, nil
 	}
-	return io.MultiReader(subReaders...)
+	// Try fan-out: find a directory entry that is a prefix of the remaining
+	// hash and recurse into it. If a matching directory doesn't contain the
+	// note, continue checking other entries for longer prefix matches.
+	for _, entry := range tree.Entries {
+		if entry.Mode == filemode.Dir && strings.HasPrefix(remaining, entry.Name) {
+			subtree, err := tree.Tree(entry.Name)
+			if err != nil {
+				continue
+			}
+			found, err := lookupNoteEntry(subtree, remaining[len(entry.Name):])
+			if err == nil {
+				return found, nil
+			}
+		}
+	}
+	return nil, plumbing.ErrObjectNotFound
 }
 
-// splitBatchCheckOutput parses the output of a 'git cat-file --batch-check=...' command.
-//
-// The output is expected to be formatted as a series of entries, with each
-// entry consisting of:
-// 1. The SHA1 hash of the git object being output, followed by a space.
-// 2. The git "type" of the object (commit, blob, tree, missing, etc), followed by a newline.
-//
-// To generate this format, make sure that the 'git cat-file' command includes
-// the argument '--batch-check=%(objectname) %(objecttype)'.
-//
-// The return value is a map from object hash to a boolean indicating if that object is a commit.
-func splitBatchCheckOutput(out io.Reader) (map[string]bool, error) {
-	isCommit := make(map[string]bool)
-	reader := bufio.NewReader(out)
-	for {
-		nameLine, err := reader.ReadString(byte(' '))
-		if err == io.EOF {
-			return isCommit, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("Failure while reading the next object name: %v", err)
-		}
-		nameLine = strings.TrimSuffix(nameLine, " ")
-		typeLine, err := reader.ReadString(byte('\n'))
-		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("Failure while reading the next object type: %q - %v", nameLine, err)
-		}
-		typeLine = strings.TrimSuffix(typeLine, "\n")
-		if typeLine == "commit" {
-			isCommit[nameLine] = true
-		}
+// GetNotes reads the notes from the given ref for a given revision.
+func (repo *GitRepo) GetNotes(notesRef, revision string) []Note {
+	tree, err := repo.readNotesTree(notesRef)
+	if err != nil || tree == nil {
+		return nil
 	}
-}
-
-// splitBatchCatFileOutput parses the output of a 'git cat-file --batch=...' command.
-//
-// The output is expected to be formatted as a series of entries, with each
-// entry consisting of:
-// 1. The SHA1 hash of the git object being output, followed by a newline.
-// 2. The size of the object's contents in bytes, followed by a newline.
-// 3. The objects contents.
-//
-// To generate this format, make sure that the 'git cat-file' command includes
-// the argument '--batch=%(objectname)\n%(objectsize)'.
-func splitBatchCatFileOutput(out io.Reader) (map[string][]byte, error) {
-	contentsMap := make(map[string][]byte)
-	reader := bufio.NewReader(out)
-	for {
-		nameLine, err := reader.ReadString(byte('\n'))
-		if before, ok := strings.CutSuffix(nameLine, "\n"); ok {
-			nameLine = before
-		}
-		if err == io.EOF {
-			return contentsMap, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("Failure while reading the next object name: %v", err)
-		}
-		sizeLine, err := reader.ReadString(byte('\n'))
-		if before, ok := strings.CutSuffix(sizeLine, "\n"); ok {
-			sizeLine = before
-		}
-		if err != nil {
-			return nil, fmt.Errorf("Failure while reading the next object size: %q - %v", nameLine, err)
-		}
-		size, err := strconv.Atoi(sizeLine)
-		if err != nil {
-			return nil, fmt.Errorf("Failure while parsing the next object size: %q - %v", nameLine, err)
-		}
-		contentBytes := make([]byte, size, size)
-		readDest := contentBytes
-		len := 0
-		err = nil
-		for err == nil && len < size {
-			nextLen := 0
-			nextLen, err = reader.Read(readDest)
-			len += nextLen
-			readDest = contentBytes[len:]
-		}
-		contentsMap[nameLine] = contentBytes
-		if err == io.EOF {
-			return contentsMap, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		for bs, err := reader.Peek(1); err == nil && bs[0] == byte('\n'); bs, err = reader.Peek(1) {
-			reader.ReadByte()
-		}
-	}
-}
-
-// notesMapping represents the association between a git object and the notes for that object.
-type notesMapping struct {
-	ObjectHash *string
-	NotesHash  *string
-}
-
-// notesOverview represents a high-level overview of all the notes under a single notes ref.
-type notesOverview struct {
-	NotesMappings      []*notesMapping
-	ObjectHashesReader io.Reader
-	NotesHashesReader  io.Reader
-}
-
-// notesOverview returns an overview of the git notes stored under the given ref.
-func (repo *GitRepo) notesOverview(notesRef string) (*notesOverview, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if err := repo.runGitCommandWithIO(nil, &stdout, &stderr, "notes", "--ref", notesRef, "list"); err != nil {
-		return nil, err
-	}
-
-	var notesMappings []*notesMapping
-	var objHashes []*string
-	var notesHashes []*string
-	outScanner := bufio.NewScanner(&stdout)
-	for outScanner.Scan() {
-		line := outScanner.Text()
-		lineParts := strings.Split(line, " ")
-		if len(lineParts) != 2 {
-			return nil, fmt.Errorf("Malformed output line from 'git-notes list': %q", line)
-		}
-		objHash := &lineParts[1]
-		notesHash := &lineParts[0]
-		notesMappings = append(notesMappings, &notesMapping{
-			ObjectHash: objHash,
-			NotesHash:  notesHash,
-		})
-		objHashes = append(objHashes, objHash)
-		notesHashes = append(notesHashes, notesHash)
-	}
-	if err := outScanner.Err(); err != nil {
-		return nil, fmt.Errorf("Failure parsing the output of 'git-notes list': %v", err)
-	}
-	return &notesOverview{
-		NotesMappings:      notesMappings,
-		ObjectHashesReader: stringsReader(objHashes),
-		NotesHashesReader:  stringsReader(notesHashes),
-	}, nil
-}
-
-var parseBatchCheckOutput = splitBatchCheckOutput
-
-// getIsCommitMap returns a mapping of all the annotated objects that are commits.
-func (overview *notesOverview) getIsCommitMap(repo *GitRepo) (map[string]bool, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if err := repo.runGitCommandWithIO(overview.ObjectHashesReader, &stdout, &stderr, "cat-file", "--batch-check=%(objectname) %(objecttype)"); err != nil {
-		return nil, fmt.Errorf("Failure performing a batch file check: %v", err)
-	}
-	isCommit, err := parseBatchCheckOutput(&stdout)
+	entry, err := lookupNoteEntry(tree, revision)
 	if err != nil {
-		return nil, fmt.Errorf("Failure parsing the output of a batch file check: %v", err)
+		return nil
 	}
-	return isCommit, nil
-}
-
-// getNoteContentsMap returns a mapping from all the notes hashes to their contents.
-func (overview *notesOverview) getNoteContentsMap(repo *GitRepo) (map[string][]byte, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if err := repo.runGitCommandWithIO(overview.NotesHashesReader, &stdout, &stderr, "cat-file", "--batch=%(objectname)\n%(objectsize)"); err != nil {
-		return nil, fmt.Errorf("Failure performing a batch file read: %v", err)
-	}
-	noteContentsMap, err := splitBatchCatFileOutput(&stdout)
+	contents, err := repo.readBlobContents(entry.Hash)
 	if err != nil {
-		return nil, fmt.Errorf("Failure parsing the output of a batch file read: %v", err)
+		return nil
 	}
-	return noteContentsMap, nil
+	return splitNotesBlob(contents)
 }
 
 // GetAllNotes reads the contents of the notes under the given ref for every commit.
 //
 // The returned value is a mapping from commit hash to the list of notes for that commit.
-//
-// This is the batch version of the corresponding GetNotes(...) method.
 func (repo *GitRepo) GetAllNotes(notesRef string) (map[string][]Note, error) {
-	// This code is unfortunately quite complicated, but it needs to be so.
-	//
-	// Conceptually, this is equivalent to:
-	//   result := make(map[string][]Note)
-	//   for _, commit := range repo.ListNotedRevisions(notesRef) {
-	//     result[commit] = repo.GetNotes(notesRef, commit)
-	//   }
-	//   return result, nil
-	//
-	// However, that logic would require separate executions of the 'git'
-	// command for every annotated commit. For a repo with 10s of thousands
-	// of reviews, that would mean calling Cmd.Run(...) 10s of thousands of
-	// times. That, in turn, would take so long that the tool would be unusable.
-	//
-	// This method avoids that by taking advantage of the 'git cat-file --batch="..."'
-	// command. That allows us to use a single invocation of Cmd.Run(...) to
-	// inspect multiple git objects at once.
-	//
-	// As such, regardless of the number of reviews in a repo, we can get all
-	// of the notes using a total of three invocations of Cmd.Run(...):
-	//  1. One to list all the annotated objects (and their notes hash)
-	//  2. A second one to filter out all of the annotated objects that are not commits.
-	//  3. A final one to get the contents of all of the notes blobs.
-	overview, err := repo.notesOverview(notesRef)
+	tree, err := repo.readNotesTree(notesRef)
 	if err != nil {
 		return nil, err
 	}
-	isCommit, err := overview.getIsCommitMap(repo)
-	if err != nil {
-		return nil, fmt.Errorf("Failure building the set of commit objects: %v", err)
+	if tree == nil {
+		return nil, nil
 	}
-	noteContentsMap, err := overview.getNoteContentsMap(repo)
+	entries, err := collectNotesEntries(tree, "")
 	if err != nil {
-		return nil, fmt.Errorf("Failure building the mapping from notes hash to contents: %v", err)
+		return nil, err
 	}
 	commitNotesMap := make(map[string][]Note)
-	for _, notesMapping := range overview.NotesMappings {
-		if !isCommit[*notesMapping.ObjectHash] {
+	for _, e := range entries {
+		// Only include notes for commit objects. Requesting CommitObject
+		// directly lets the storer check the type from the object header
+		// without fully decompressing the object.
+		if _, err := repo.gogit.Storer.EncodedObject(plumbing.CommitObject, plumbing.NewHash(e.ObjectHash)); err != nil {
 			continue
 		}
-		noteBytes := noteContentsMap[*notesMapping.NotesHash]
-		byteSlices := bytes.Split(noteBytes, []byte("\n"))
-		var notes []Note
-		for _, slice := range byteSlices {
-			notes = append(notes, Note(slice))
+		contents, err := repo.readBlobContents(e.BlobHash)
+		if err != nil {
+			continue
 		}
-		commitNotesMap[*notesMapping.ObjectHash] = notes
+		commitNotesMap[e.ObjectHash] = splitNotesBlob(contents)
 	}
-
 	return commitNotesMap, nil
 }
 
@@ -1300,23 +1202,20 @@ func (repo *GitRepo) AppendNote(notesRef, revision string, note Note) error {
 
 // ListNotedRevisions returns the collection of revisions that are annotated by notes in the given ref.
 func (repo *GitRepo) ListNotedRevisions(notesRef string) []string {
-	var revisions []string
-	notesListOut, err := repo.runGitCommand("notes", "--ref", notesRef, "list")
+	tree, err := repo.readNotesTree(notesRef)
+	if err != nil || tree == nil {
+		return nil
+	}
+	entries, err := collectNotesEntries(tree, "")
 	if err != nil {
 		return nil
 	}
-	notesList := strings.SplitSeq(notesListOut, "\n")
-	for notePair := range notesList {
-		noteParts := strings.SplitN(notePair, " ", 2)
-		if len(noteParts) == 2 {
-			objHash := noteParts[1]
-			objType, err := repo.runGitCommand("cat-file", "-t", objHash)
-			// If a note points to an object that we do not know about (yet), then err will not
-			// be nil. We can safely just ignore those notes.
-			if err == nil && objType == "commit" {
-				revisions = append(revisions, objHash)
-			}
+	var revisions []string
+	for _, e := range entries {
+		if _, err := repo.gogit.Storer.EncodedObject(plumbing.CommitObject, plumbing.NewHash(e.ObjectHash)); err != nil {
+			continue
 		}
+		revisions = append(revisions, e.ObjectHash)
 	}
 	return revisions
 }

@@ -3,7 +3,6 @@ package repository
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1363,135 +1362,6 @@ func TestMockRepoMergeRefNonFFError(t *testing.T) {
 	}
 }
 
-// Tests for splitBatchCheckOutput with malformed input
-func TestSplitBatchCheckOutputEmpty(t *testing.T) {
-	buf := bytes.NewBuffer(nil)
-	result, err := splitBatchCheckOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map, got %v", result)
-	}
-}
-
-func TestSplitBatchCheckOutputValid(t *testing.T) {
-	buf := bytes.NewBufferString("abc123 commit\ndef456 blob\nghi789 commit\n")
-	result, err := splitBatchCheckOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("expected 2 commits, got %d", len(result))
-	}
-	if !result["abc123"] {
-		t.Fatal("expected abc123 to be a commit")
-	}
-	if !result["ghi789"] {
-		t.Fatal("expected ghi789 to be a commit")
-	}
-	if result["def456"] {
-		t.Fatal("expected def456 to not be a commit")
-	}
-}
-
-func TestSplitBatchCheckOutputNoSpaceEOF(t *testing.T) {
-	// A line with no space causes ReadString(' ') to read until EOF.
-	// The function treats EOF as a clean termination.
-	buf := bytes.NewBufferString("malformed_line_no_space\n")
-	result, err := splitBatchCheckOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map, got %v", result)
-	}
-}
-
-func TestSplitBatchCheckOutputMalformedNoNewline(t *testing.T) {
-	// A name followed by space, but the type line has no newline (EOF)
-	buf := bytes.NewBufferString("abc123 commit")
-	result, err := splitBatchCheckOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result["abc123"] {
-		t.Fatal("expected abc123 to be a commit even without trailing newline")
-	}
-}
-
-// Tests for splitBatchCatFileOutput with malformed input
-func TestSplitBatchCatFileOutputEmpty(t *testing.T) {
-	buf := bytes.NewBuffer(nil)
-	result, err := splitBatchCatFileOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map, got %v", result)
-	}
-}
-
-func TestSplitBatchCatFileOutputValid(t *testing.T) {
-	// Format: name\nsize\ncontent
-	buf := bytes.NewBufferString("abc123\n5\nhello\ndef456\n3\nfoo\n")
-	result, err := splitBatchCatFileOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(result))
-	}
-	if string(result["abc123"]) != "hello" {
-		t.Fatalf("expected 'hello', got %q", string(result["abc123"]))
-	}
-	if string(result["def456"]) != "foo" {
-		t.Fatalf("expected 'foo', got %q", string(result["def456"]))
-	}
-}
-
-func TestSplitBatchCatFileOutputNameOnly(t *testing.T) {
-	// Only name line, no size line (EOF after name)
-	buf := bytes.NewBufferString("abc123\n")
-	_, err := splitBatchCatFileOutput(buf)
-	if err == nil {
-		t.Fatal("expected error when size line is missing")
-	}
-}
-
-func TestSplitBatchCatFileOutputBadSize(t *testing.T) {
-	// Size line is not a number
-	buf := bytes.NewBufferString("abc123\nnotanumber\n")
-	_, err := splitBatchCatFileOutput(buf)
-	if err == nil {
-		t.Fatal("expected error for non-numeric size")
-	}
-}
-
-func TestSplitBatchCatFileOutputNameEOF(t *testing.T) {
-	// Name without trailing newline triggers EOF
-	buf := bytes.NewBufferString("abc123")
-	result, err := splitBatchCatFileOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map for name-only EOF, got %v", result)
-	}
-}
-
-func TestSplitBatchCatFileOutputContentEOF(t *testing.T) {
-	// Content ends at EOF
-	buf := bytes.NewBufferString("abc123\n3\nabc")
-	result, err := splitBatchCatFileOutput(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(result["abc123"]) != "abc" {
-		t.Fatalf("expected 'abc', got %q", string(result["abc123"]))
-	}
-}
-
 // Test runGitCommandWithEnv with empty stderr
 func TestGitRepoRunGitCommandWithEnvEmptyStderr(t *testing.T) {
 	repo := setupTestRepo(t)
@@ -1747,83 +1617,12 @@ func TestGitRepoArchiveRefGetDetailsError(t *testing.T) {
 	}
 }
 
-// Test notesOverview error path
-func TestGitRepoNotesOverviewError(t *testing.T) {
-	repo := &GitRepo{Path: "/nonexistent/path"}
-	_, err := repo.notesOverview("refs/notes/test")
-	if err == nil {
-		t.Fatal("expected error for nonexistent repo")
-	}
-}
-
-// Test notesOverview malformed output
-func TestGitRepoNotesOverviewMalformedLine(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Notes overview calls "git notes list" which normally outputs "hash hash" lines.
-	// If the output is malformed, it should return an error.
-	// We can test this indirectly by ensuring well-formed output works.
-	headHash, _ := repo.GetCommitHash("HEAD")
-	notesRef := "refs/notes/test"
-	if err := repo.AppendNote(notesRef, headHash, Note("overview test")); err != nil {
-		t.Fatal(err)
-	}
-	overview, err := repo.notesOverview(notesRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(overview.NotesMappings) == 0 {
-		t.Fatal("expected at least one notes mapping")
-	}
-}
-
-// Test getIsCommitMap error path
-func TestGitRepoGetIsCommitMapError(t *testing.T) {
-	repo := &GitRepo{Path: "/nonexistent/path"}
-	overview := &notesOverview{
-		ObjectHashesReader: strings.NewReader("test\n"),
-	}
-	_, err := overview.getIsCommitMap(repo)
-	if err == nil {
-		t.Fatal("expected error for nonexistent repo")
-	}
-}
-
-// Test getNoteContentsMap error path
-func TestGitRepoGetNoteContentsMapError(t *testing.T) {
-	repo := &GitRepo{Path: "/nonexistent/path"}
-	overview := &notesOverview{
-		NotesHashesReader: strings.NewReader("test\n"),
-	}
-	_, err := overview.getNoteContentsMap(repo)
-	if err == nil {
-		t.Fatal("expected error for nonexistent repo")
-	}
-}
-
 // Test GetAllNotes error paths
 func TestGitRepoGetAllNotesOverviewError(t *testing.T) {
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.GetAllNotes("refs/notes/test")
 	if err == nil {
 		t.Fatal("expected error for nonexistent repo")
-	}
-}
-
-// Test GetAllNotes with getIsCommitMap error
-func TestGitRepoGetAllNotesIsCommitError(t *testing.T) {
-	repo := setupTestRepo(t)
-	headHash, _ := repo.GetCommitHash("HEAD")
-	notesRef := "refs/notes/allnotes_test"
-	if err := repo.AppendNote(notesRef, headHash, Note("test note")); err != nil {
-		t.Fatal(err)
-	}
-	// Verify GetAllNotes works correctly
-	notes, err := repo.GetAllNotes(notesRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(notes) == 0 {
-		t.Fatal("expected at least one noted commit")
 	}
 }
 
@@ -2199,22 +1998,6 @@ func TestGitRepoRemotesMultiple(t *testing.T) {
 	}
 }
 
-// Test stringsReader
-func TestStringsReader(t *testing.T) {
-	s1 := "hello"
-	s2 := "world"
-	reader := stringsReader([]*string{&s1, &s2})
-	var buf bytes.Buffer
-	_, err := buf.ReadFrom(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := buf.String()
-	if !strings.Contains(result, "hello") || !strings.Contains(result, "world") {
-		t.Fatalf("unexpected reader output: %q", result)
-	}
-}
-
 // Test GetAllNotes with non-commit annotated object
 func TestGitRepoGetAllNotesNonCommitAnnotated(t *testing.T) {
 	repo := setupTestRepo(t)
@@ -2510,36 +2293,6 @@ func TestGitRepoGetCommitDetailsJSONError(t *testing.T) {
 	}
 }
 
-// Additional test for splitBatchCheckOutput - error reading type after name
-func TestSplitBatchCheckOutputTypeReadError(t *testing.T) {
-	// Name with space but no following type (truncated mid-entry)
-	buf := bytes.NewBufferString("abc123 ")
-	result, err := splitBatchCheckOutput(buf)
-	// ReadString('\n') should return EOF
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map for truncated entry, got %v", result)
-	}
-}
-
-// Test splitBatchCatFileOutput with a read error during content
-func TestSplitBatchCatFileOutputPartialContent(t *testing.T) {
-	// Name and size, but content is shorter than declared
-	buf := bytes.NewBufferString("abc123\n10\nhello")
-	result, err := splitBatchCatFileOutput(buf)
-	if err != nil {
-		// Should get EOF during read
-		t.Logf("Got expected error: %v", err)
-	} else {
-		// Or it may return what it has
-		if len(result) > 0 {
-			t.Logf("Got partial result: %v", result)
-		}
-	}
-}
-
 // Test runGitCommandWithEnv with empty stderr fallback
 func TestGitRepoRunGitCommandWithEnvEmptyStderrFallback(t *testing.T) {
 	repo := setupTestRepo(t)
@@ -2699,77 +2452,6 @@ func TestGitRepoFetchAndReturnNewReviewHashesUnchanged(t *testing.T) {
 	}
 }
 
-// Test GetAllNotes with getIsCommitMap parsing error
-func TestGitRepoGetAllNotesGetIsCommitMapParseError(t *testing.T) {
-	repo := setupTestRepo(t)
-	headHash, _ := repo.GetCommitHash("HEAD")
-	notesRef := "refs/notes/parse_test"
-
-	// Add notes to a real commit
-	if err := repo.AppendNote(notesRef, headHash, Note("test")); err != nil {
-		t.Fatal(err)
-	}
-
-	// GetAllNotes should work fine - exercises the full pipeline
-	notes, err := repo.GetAllNotes(notesRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := notes[headHash]; !ok {
-		t.Fatal("expected notes for commit")
-	}
-}
-
-// Test getIsCommitMap splitBatchCheckOutput parse error
-func TestGitRepoGetIsCommitMapSplitError(t *testing.T) {
-	repo := setupTestRepo(t)
-	headHash, _ := repo.GetCommitHash("HEAD")
-	notesRef := "refs/notes/iscommit_test"
-
-	if err := repo.AppendNote(notesRef, headHash, Note("note1")); err != nil {
-		t.Fatal(err)
-	}
-
-	// Get the overview
-	overview, err := repo.notesOverview(notesRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Call getIsCommitMap on a valid repo - should succeed
-	isCommit, err := overview.getIsCommitMap(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(isCommit) == 0 {
-		t.Fatal("expected at least one commit in isCommit map")
-	}
-}
-
-// Test getNoteContentsMap splitBatchCatFileOutput parse error
-func TestGitRepoGetNoteContentsMapSplitError(t *testing.T) {
-	repo := setupTestRepo(t)
-	headHash, _ := repo.GetCommitHash("HEAD")
-	notesRef := "refs/notes/contents_test"
-
-	if err := repo.AppendNote(notesRef, headHash, Note("note content here")); err != nil {
-		t.Fatal(err)
-	}
-
-	overview, err := repo.notesOverview(notesRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	contentsMap, err := overview.getNoteContentsMap(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(contentsMap) == 0 {
-		t.Fatal("expected at least one entry in contents map")
-	}
-}
-
 // Test ListNotedRevisions where notes list fails (nonexistent notes ref)
 func TestGitRepoListNotedRevisionsError(t *testing.T) {
 	repo := &GitRepo{Path: "/nonexistent/path"}
@@ -2810,31 +2492,6 @@ func TestGitRepoMergeArchivesMergeArchivesFailure(t *testing.T) {
 	err := repo.MergeArchives("origin", "refs/devtools/archives/*")
 	if err == nil {
 		t.Fatal("expected error when merging archives with non-commit ref")
-	}
-}
-
-// Test GetAllNotes with getIsCommitMap error
-func TestGitRepoGetAllNotesIsCommitMapError(t *testing.T) {
-	// This test verifies the error path on line 964 of git.go
-	// where getIsCommitMap returns an error. Hard to trigger with a real
-	// repo since cat-file --batch-check works on any object. We exercise
-	// the code path through the nonexistent path repo.
-	repo := &GitRepo{Path: "/nonexistent/path"}
-	_, err := repo.GetAllNotes("refs/notes/test")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-// Test GetAllNotes with getNoteContentsMap error
-func TestGitRepoGetAllNotesNoteContentsMapError(t *testing.T) {
-	// Similar to above - hard to trigger independently since we need
-	// notesOverview to succeed but getNoteContentsMap to fail
-	// We verify through the nonexistent path repo which fails at notesOverview
-	repo := &GitRepo{Path: "/nonexistent/path"}
-	_, err := repo.GetAllNotes("refs/notes/test")
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }
 
@@ -2891,26 +2548,6 @@ func TestGitRepoRunGitCommandWithEnvEmptyStderrMessage(t *testing.T) {
 		}
 	}
 	// Either way, verify that runGitCommandWithEnv error path was hit
-}
-
-// Test notesOverview scanner error handling
-func TestGitRepoNotesOverviewScannerError(t *testing.T) {
-	// notesOverview calls "git notes list" which outputs "hash hash" lines.
-	// Line 879 malformed output is defensive. We test the happy path.
-	repo := setupTestRepo(t)
-	headHash, _ := repo.GetCommitHash("HEAD")
-	notesRef := "refs/notes/scanner_test"
-	if err := repo.AppendNote(notesRef, headHash, Note("test")); err != nil {
-		t.Fatal(err)
-	}
-
-	overview, err := repo.notesOverview(notesRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(overview.NotesMappings) != 1 {
-		t.Fatalf("expected 1 mapping, got %d", len(overview.NotesMappings))
-	}
 }
 
 // Test ArchiveRef IsAncestor error path (line 501-503)
@@ -3209,16 +2846,6 @@ func TestGitRepoMergeArchivesAllPaths(t *testing.T) {
 		if mergedHash == localH || mergedHash == remoteH {
 			t.Fatal("expected a new merge commit")
 		}
-	}
-}
-
-// Test splitBatchCatFileOutput with a reader that has read errors
-func TestSplitBatchCatFileOutputSizeEOF(t *testing.T) {
-	// Size line ends at EOF
-	buf := bytes.NewBufferString("abc123\n5")
-	_, err := splitBatchCatFileOutput(buf)
-	if err == nil {
-		t.Fatal("expected error when size line has no newline (EOF)")
 	}
 }
 
@@ -3586,107 +3213,6 @@ func TestReadTreeWithHashMalformedBadParts(t *testing.T) {
 	_, err := repo.ReadTree(blobHash)
 	if err == nil {
 		t.Error("expected error from ReadTree with blob hash")
-	}
-}
-
-func TestNotesOverviewMalformedLine(t *testing.T) {
-	repo := setupTestRepo(t)
-	withExecHook(t, func(cmd *exec.Cmd) error {
-		if len(cmd.Args) > 1 && cmd.Args[1] == "notes" {
-			fmt.Fprint(cmd.Stdout, "malformed_no_space\n")
-			return nil
-		}
-		return cmd.Run()
-	})
-	_, err := repo.notesOverview("refs/notes/test")
-	if err == nil {
-		t.Error("expected error from notesOverview")
-	}
-	if !strings.Contains(err.Error(), "Malformed output line") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestNotesOverviewScannerError(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Write a line longer than bufio.Scanner's default 64KB buffer
-	longLine := strings.Repeat("x", 70000)
-	withExecHook(t, func(cmd *exec.Cmd) error {
-		if len(cmd.Args) > 1 && cmd.Args[1] == "notes" {
-			fmt.Fprint(cmd.Stdout, longLine+"\n")
-			return nil
-		}
-		return cmd.Run()
-	})
-	_, err := repo.notesOverview("refs/notes/test")
-	if err == nil {
-		t.Error("expected error from notesOverview")
-	}
-	if !strings.Contains(err.Error(), "Failure parsing") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestGetAllNotesGetIsCommitMapCmdError(t *testing.T) {
-	repo := setupTestRepo(t)
-	addCommit(t, repo, "noted.txt", "content", "noted commit")
-	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
-	gitRun(t, repo.Path, "notes", "--ref=refs/notes/test", "add", "-m", "test note", hash)
-
-	withExecHook(t, func(cmd *exec.Cmd) error {
-		for _, arg := range cmd.Args {
-			if strings.HasPrefix(arg, "--batch-check") {
-				return fmt.Errorf("injected cat-file batch-check failure")
-			}
-		}
-		return cmd.Run()
-	})
-	_, err := repo.GetAllNotes("refs/notes/test")
-	if err == nil {
-		t.Error("expected error from GetAllNotes")
-	}
-}
-
-func TestGetAllNotesGetIsCommitMapParseError(t *testing.T) {
-	repo := setupTestRepo(t)
-	addCommit(t, repo, "noted.txt", "content", "noted commit")
-	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
-	gitRun(t, repo.Path, "notes", "--ref=refs/notes/test", "add", "-m", "test note", hash)
-
-	old := parseBatchCheckOutput
-	t.Cleanup(func() { parseBatchCheckOutput = old })
-	parseBatchCheckOutput = func(r io.Reader) (map[string]bool, error) {
-		return nil, fmt.Errorf("injected parse error")
-	}
-	_, err := repo.GetAllNotes("refs/notes/test")
-	if err == nil {
-		t.Error("expected error from GetAllNotes")
-	}
-	if !strings.Contains(err.Error(), "Failure building the set of commit objects") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestGetAllNotesGetNoteContentsMapError(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Add a note so notesOverview produces output
-	addCommit(t, repo, "noted.txt", "content", "noted commit")
-	hash := gitRun(t, repo.Path, "rev-parse", "HEAD")
-	gitRun(t, repo.Path, "notes", "--ref=refs/notes/test", "add", "-m", "test note", hash)
-
-	withExecHook(t, func(cmd *exec.Cmd) error {
-		for _, arg := range cmd.Args {
-			if strings.HasPrefix(arg, "--batch=") {
-				// Write malformed batch output (bad size field)
-				fmt.Fprint(cmd.Stdout, "objecthash\nnotanumber\n")
-				return nil
-			}
-		}
-		return cmd.Run()
-	})
-	_, err := repo.GetAllNotes("refs/notes/test")
-	if err == nil {
-		t.Error("expected error from GetAllNotes")
 	}
 }
 
