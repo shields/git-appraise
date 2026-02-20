@@ -8,10 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 func setupTestRepoWithRemote(t *testing.T) (local *GitRepo, remoteDir string) {
@@ -1115,15 +1118,6 @@ func TestGitRepoVerifyCommitNonCommit(t *testing.T) {
 	}
 }
 
-func TestGitRepoRunGitCommandWithEnvError(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Run a git command that fails to exercise the error path in runGitCommandWithEnv
-	_, err := repo.runGitCommandWithEnv(nil, "log", "--invalid-flag-that-does-not-exist")
-	if err == nil {
-		t.Fatal("expected error for invalid git command")
-	}
-}
-
 func TestGitRepoStoreAndReadTreeNested(t *testing.T) {
 	repo := setupTestRepo(t)
 	innerTree := NewTree(map[string]TreeChild{
@@ -1359,16 +1353,6 @@ func TestMockRepoMergeRefNonFFError(t *testing.T) {
 	err := repo.MergeRef("nonexistent", false, "msg")
 	if err == nil {
 		t.Fatal("expected error for nonexistent ref in non-ff merge")
-	}
-}
-
-// Test runGitCommandWithEnv with empty stderr
-func TestGitRepoRunGitCommandWithEnvEmptyStderr(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Use GIT_DIR pointing to nonexistent dir to trigger git failure
-	_, err := repo.runGitCommandWithEnv([]string{"GIT_DIR=/nonexistent"}, "rev-parse")
-	if err == nil {
-		t.Skip("could not trigger error with empty stderr")
 	}
 }
 
@@ -2293,19 +2277,6 @@ func TestGitRepoGetCommitDetailsJSONError(t *testing.T) {
 	}
 }
 
-// Test runGitCommandWithEnv with empty stderr fallback
-func TestGitRepoRunGitCommandWithEnvEmptyStderrFallback(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Run a command with env that makes git fail silently
-	_, err := repo.runGitCommandWithEnv(
-		[]string{"GIT_DIR=/nonexistent/dir/.git"},
-		"rev-parse", "--git-dir",
-	)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 // Test ArchiveRef update-ref error path
 func TestGitRepoArchiveRefUpdateRefPaths(t *testing.T) {
 	repo := setupTestRepo(t)
@@ -2528,26 +2499,6 @@ func TestGitRepoFetchAndReturnNewReviewHashesLsTreeError(t *testing.T) {
 	if len(hashes) == 0 {
 		t.Fatal("expected at least one hash")
 	}
-}
-
-// Test runGitCommandWithEnv empty stderr fallback message
-func TestGitRepoRunGitCommandWithEnvEmptyStderrMessage(t *testing.T) {
-	// When runGitCommandWithEnv fails and stderr is empty,
-	// the error message should include the command args
-	repo := setupTestRepo(t)
-	// Use GIT_DIR to override the repo directory to something invalid
-	_, err := repo.runGitCommandWithEnv(
-		[]string{"HOME=" + t.TempDir(), "GIT_DIR=" + filepath.Join(t.TempDir(), ".git")},
-		"rev-parse", "HEAD",
-	)
-	if err == nil {
-		// Some git versions may not fail here. Try another approach.
-		_, err = repo.runGitCommandWithEnv(nil, "rev-parse", "--verify", "nonexistent_ref_12345")
-		if err == nil {
-			t.Skip("could not trigger runGitCommandWithEnv error")
-		}
-	}
-	// Either way, verify that runGitCommandWithEnv error path was hit
 }
 
 // Test ArchiveRef IsAncestor error path (line 501-503)
@@ -2995,20 +2946,6 @@ func TestGitRepoPullNotesAndArchiveMergeNotesCorrupt(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "merging notes") {
 		t.Fatalf("expected 'merging notes' in error, got: %v", err)
-	}
-}
-
-func TestGitRepoRunGitCommandWithEnvEmptyStderrDiffQuiet(t *testing.T) {
-	repo := setupTestRepo(t)
-	addCommit(t, repo, "change.txt", "new content\n", "second commit")
-	// "git diff --quiet HEAD~1 HEAD" returns exit code 1 (differences found)
-	// with empty stderr, triggering the fallback message on line 92-93.
-	_, err := repo.runGitCommandWithEnv(nil, "diff", "--quiet", "HEAD~1", "HEAD")
-	if err == nil {
-		t.Skip("diff --quiet did not return error; git version may differ")
-	}
-	if !strings.Contains(err.Error(), "Error running git command") {
-		t.Errorf("expected fallback error message, got: %v", err)
 	}
 }
 
@@ -3978,4 +3915,868 @@ func TestFetchAndReturnNewReviewHashesSecondGetRefHashesError(t *testing.T) {
 	if err == nil {
 		t.Error("expected error from FetchAndReturnNewReviewHashes when second getRefHashes fails")
 	}
+}
+
+// --- Coverage tests for remaining uncovered paths ---
+
+func TestRunGitCommandEmptyStderr(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Override execGitCommand to simulate a failure with empty stderr.
+	orig := execGitCommand
+	defer func() { execGitCommand = orig }()
+	execGitCommand = func(cmd *exec.Cmd) error {
+		return fmt.Errorf("simulated failure")
+	}
+	_, err := repo.runGitCommand("status")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "Error running git command") {
+		t.Errorf("expected fallback error message, got %q", err)
+	}
+}
+
+func TestGetCoreEditorFallbacks(t *testing.T) {
+	repo := setupTestRepo(t)
+	t.Setenv("GIT_EDITOR", "")
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+
+	// With no env vars and no git config, should fall back to "vi".
+	editor, err := repo.GetCoreEditor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if editor != "vi" {
+		t.Errorf("expected 'vi', got %q", editor)
+	}
+
+	// Test EDITOR env var.
+	t.Setenv("EDITOR", "nano")
+	editor, _ = repo.GetCoreEditor()
+	if editor != "nano" {
+		t.Errorf("expected 'nano', got %q", editor)
+	}
+
+	// Test VISUAL overrides EDITOR.
+	t.Setenv("VISUAL", "code")
+	editor, _ = repo.GetCoreEditor()
+	if editor != "code" {
+		t.Errorf("expected 'code', got %q", editor)
+	}
+
+	// Test git config core.editor overrides VISUAL.
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	gitRun(t, repo.Path, "config", "core.editor", "emacs")
+	// Re-open to pick up config change.
+	repo2, err := NewGitRepo(repo.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editor, _ = repo2.GetCoreEditor()
+	if editor != "emacs" {
+		t.Errorf("expected 'emacs', got %q", editor)
+	}
+
+	// Test GIT_EDITOR overrides everything.
+	t.Setenv("GIT_EDITOR", "vim")
+	editor, _ = repo2.GetCoreEditor()
+	if editor != "vim" {
+		t.Errorf("expected 'vim', got %q", editor)
+	}
+}
+
+func TestListCommitsBetweenNilGogit(t *testing.T) {
+	repo := &GitRepo{Path: t.TempDir()}
+	_, err := repo.ListCommitsBetween("a", "b")
+	if err != errNotInitialized {
+		t.Errorf("expected errNotInitialized, got %v", err)
+	}
+}
+
+func TestListCommitsBetweenBadToRef(t *testing.T) {
+	repo := setupTestRepo(t)
+	// "from" resolves (HEAD), but "to" is invalid.
+	_, err := repo.ListCommitsBetween("HEAD", "nonexistent_ref_xyz")
+	if err == nil {
+		t.Error("expected error for invalid 'to' ref")
+	}
+}
+
+func TestGetNotesReadBlobError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	// Append a note so the ref exists.
+	if err := repo.AppendNote("refs/notes/test", hash, Note("test note")); err != nil {
+		t.Fatal(err)
+	}
+	// Requesting notes for a nonexistent revision should return nil (not found).
+	notes := repo.GetNotes("refs/notes/test", "0000000000000000000000000000000000000000")
+	if notes != nil {
+		t.Error("expected nil for nonexistent revision")
+	}
+}
+
+func TestGetAllNotesReadBlobError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	if err := repo.AppendNote("refs/notes/test", hash, Note("test note")); err != nil {
+		t.Fatal(err)
+	}
+	// GetAllNotes should work and return notes for the commit.
+	allNotes, err := repo.GetAllNotes("refs/notes/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allNotes) == 0 {
+		t.Error("expected at least one note entry")
+	}
+}
+
+func TestGetAllNotesEmptyRef(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Non-existent ref returns nil.
+	allNotes, err := repo.GetAllNotes("refs/notes/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allNotes != nil {
+		t.Error("expected nil for nonexistent ref")
+	}
+}
+
+func TestGetAllNotesError(t *testing.T) {
+	repo := &GitRepo{Path: t.TempDir()}
+	_, err := repo.GetAllNotes("refs/notes/test")
+	if err != errNotInitialized {
+		t.Errorf("expected errNotInitialized, got %v", err)
+	}
+}
+
+func TestListNotedRevisionsNonCommitEntry(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Store a blob and annotate it (not a commit). ListNotedRevisions should
+	// filter it out since it only returns commits.
+	blobHash, err := repo.StoreBlob("some content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendNote("refs/notes/test", blobHash, Note("note on blob")); err != nil {
+		t.Fatal(err)
+	}
+	revisions := repo.ListNotedRevisions("refs/notes/test")
+	for _, r := range revisions {
+		if r == blobHash {
+			t.Error("ListNotedRevisions should not include non-commit objects")
+		}
+	}
+}
+
+func TestAppendNoteNilGogit(t *testing.T) {
+	repo := &GitRepo{Path: t.TempDir()}
+	err := repo.AppendNote("refs/notes/test", "abc", Note("test"))
+	if err != errNotInitialized {
+		t.Errorf("expected errNotInitialized, got %v", err)
+	}
+}
+
+func TestAppendNoteReadNotesCommitError(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Create a non-commit ref to trigger readNotesCommit error.
+	blobHash, _ := repo.StoreBlob("not a commit")
+	repo.SetRef("refs/notes/badref", blobHash, "")
+	err := repo.AppendNote("refs/notes/badref", "abc123", Note("note"))
+	if err == nil {
+		t.Error("expected error from AppendNote when notes ref points to non-commit")
+	}
+}
+
+func TestAppendNoteExistingNote(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	// Append first note.
+	if err := repo.AppendNote("refs/notes/test", hash, Note("first")); err != nil {
+		t.Fatal(err)
+	}
+	// Append second note — exercises the "existing note" code path.
+	if err := repo.AppendNote("refs/notes/test", hash, Note("second")); err != nil {
+		t.Fatal(err)
+	}
+	notes := repo.GetNotes("refs/notes/test", hash)
+	if len(notes) != 2 {
+		t.Fatalf("expected 2 notes, got %d", len(notes))
+	}
+}
+
+func TestAppendNoteStoreBlobError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.BlobObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected blob store error")
+		}
+		return orig(r, obj)
+	}
+	err := repo.AppendNote("refs/notes/test", hash, Note("note"))
+	if err == nil {
+		t.Error("expected error from AppendNote when StoreBlob fails")
+	}
+}
+
+func TestAppendNoteBuildTreeError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.TreeObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected tree store error")
+		}
+		return orig(r, obj)
+	}
+	err := repo.AppendNote("refs/notes/test", hash, Note("note"))
+	if err == nil {
+		t.Error("expected error from AppendNote when buildNotesTree fails")
+	}
+}
+
+func TestAppendNoteCommitStoreError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.CommitObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected commit store error")
+		}
+		return orig(r, obj)
+	}
+	err := repo.AppendNote("refs/notes/test", hash, Note("note"))
+	if err == nil {
+		t.Error("expected error from AppendNote when commit store fails")
+	}
+}
+
+func TestFetchNilGogit(t *testing.T) {
+	repo := &GitRepo{Path: t.TempDir()}
+	err := repo.Fetch("origin", "refs/heads/*:refs/remotes/origin/*")
+	if err != errNotInitialized {
+		t.Errorf("expected errNotInitialized, got %v", err)
+	}
+}
+
+func TestPushNilGogit(t *testing.T) {
+	repo := &GitRepo{Path: t.TempDir()}
+	err := repo.Push("origin", "refs/heads/*:refs/heads/*")
+	if err != errNotInitialized {
+		t.Errorf("expected errNotInitialized, got %v", err)
+	}
+}
+
+func TestPushAlreadyUpToDate(t *testing.T) {
+	local, remoteDir := setupTestRepoWithRemote(t)
+	gitRun(t, local.Path, "push", "origin", "main")
+	// Push again — should get NoErrAlreadyUpToDate (handled as nil).
+	err := local.Push("origin", "refs/heads/main:refs/heads/main")
+	if err != nil {
+		// Some git configs don't have the remote set up for go-git push.
+		// At minimum, verify the error isn't "not initialized".
+		if err == errNotInitialized {
+			t.Fatal("unexpected errNotInitialized")
+		}
+	}
+	_ = remoteDir
+}
+
+func TestMergeNotesRefRemoteNotExist(t *testing.T) {
+	repo := setupTestRepo(t)
+	// mergeNotesRef with a remote ref that doesn't exist should be a no-op.
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMergeNotesRefReadNotesCommitError(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Create a non-commit ref for the remote notes.
+	blobHash, _ := repo.StoreBlob("not a commit")
+	repo.SetRef("refs/notes/remotes/origin/bad", blobHash, "")
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/bad")
+	if err == nil {
+		t.Error("expected error when remote notes ref points to non-commit")
+	}
+}
+
+func TestMergeNotesRefSameBlobs(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	// Append same note to both local and remote refs.
+	if err := repo.AppendNote("refs/notes/local", hash, Note("same note")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendNote("refs/notes/remotes/origin/local", hash, Note("same note")); err != nil {
+		t.Fatal(err)
+	}
+	// Merge should succeed (same blob case).
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/local")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMergeNotesRefDifferentBlobs(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	// Append different notes to local and remote refs.
+	if err := repo.AppendNote("refs/notes/local", hash, Note("local note")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendNote("refs/notes/remotes/origin/local", hash, Note("remote note")); err != nil {
+		t.Fatal(err)
+	}
+	// Merge should succeed (different blobs → cat_sort_uniq).
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify merged content has both notes.
+	notes := repo.GetNotes("refs/notes/local", hash)
+	if len(notes) < 2 {
+		t.Errorf("expected at least 2 notes after merge, got %d", len(notes))
+	}
+}
+
+func TestMergeNotesRefStoreTreeError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	if err := repo.AppendNote("refs/notes/remotes/origin/t", hash, Note("remote")); err != nil {
+		t.Fatal(err)
+	}
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.TreeObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected tree error")
+		}
+		return orig(r, obj)
+	}
+	err := repo.mergeNotesRef("refs/notes/t", "refs/notes/remotes/origin/t")
+	if err == nil {
+		t.Error("expected error when tree store fails")
+	}
+}
+
+func TestMergeNotesRefStoreCommitError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	if err := repo.AppendNote("refs/notes/remotes/origin/t", hash, Note("remote")); err != nil {
+		t.Fatal(err)
+	}
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.CommitObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected commit error")
+		}
+		return orig(r, obj)
+	}
+	err := repo.mergeNotesRef("refs/notes/t", "refs/notes/remotes/origin/t")
+	if err == nil {
+		t.Error("expected error when commit store fails")
+	}
+}
+
+func TestMergeNotesRefStoreBlobError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	// Create differing notes on local and remote.
+	if err := repo.AppendNote("refs/notes/local", hash, Note("local")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendNote("refs/notes/remotes/origin/local", hash, Note("remote")); err != nil {
+		t.Fatal(err)
+	}
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.BlobObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected blob error")
+		}
+		return orig(r, obj)
+	}
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/local")
+	if err == nil {
+		t.Error("expected error when blob store fails during merge")
+	}
+}
+
+func TestDiffTreeNamesFromCommitError(t *testing.T) {
+	repo := setupTestRepo(t)
+	_, err := repo.diffTreeNames("0000000000000000000000000000000000000000", "0000000000000000000000000000000000000001")
+	if err == nil {
+		t.Error("expected error for invalid fromHash")
+	}
+}
+
+func TestDiffTreeNamesToCommitError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+	_, err := repo.diffTreeNames(hash, "0000000000000000000000000000000000000001")
+	if err == nil {
+		t.Error("expected error for invalid toHash")
+	}
+}
+
+func TestDiffTreeNamesDeletedFile(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash1, _ := repo.GetCommitHash("HEAD")
+	// Add a file then delete it to get a change with From.Name set.
+	addCommit(t, repo, "newfile.txt", "content", "add newfile")
+	hash2, _ := repo.GetCommitHash("HEAD")
+	names, err := repo.diffTreeNames(hash1, hash2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, n := range names {
+		if n == "newfile.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'newfile.txt' in diff, got %v", names)
+	}
+}
+
+func TestNotesFanout(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	// Create notes using git CLI with fan-out to exercise the fan-out code paths.
+	// First, create enough notes to potentially trigger fan-out, or manually
+	// create a fan-out tree structure.
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	// Use git notes add to create an initial note.
+	gitRun(t, repo.Path, "notes", "--ref=refs/notes/fantest", "add", "-m", "initial note", hash)
+
+	// Verify GetNotes works.
+	notes := repo.GetNotes("refs/notes/fantest", hash)
+	if len(notes) == 0 {
+		t.Fatal("expected at least one note")
+	}
+
+	// Append via go-git.
+	if err := repo.AppendNote("refs/notes/fantest", hash, Note("appended")); err != nil {
+		t.Fatal(err)
+	}
+	notes = repo.GetNotes("refs/notes/fantest", hash)
+	if len(notes) < 2 {
+		t.Fatalf("expected at least 2 notes, got %d", len(notes))
+	}
+
+	// Test ListNotedRevisions.
+	revisions := repo.ListNotedRevisions("refs/notes/fantest")
+	if len(revisions) == 0 {
+		t.Error("expected at least one revision")
+	}
+}
+
+// storeFanoutTree creates a fan-out notes tree in the repo's object store
+// and returns it loaded with proper storer reference.
+func storeFanoutTree(t *testing.T, repo *GitRepo, revision string, blobHash plumbing.Hash) *object.Tree {
+	t.Helper()
+	prefix := revision[:2]
+	suffix := revision[2:]
+
+	subEntry := object.TreeEntry{Name: suffix, Mode: filemode.Regular, Hash: blobHash}
+	subTree := &object.Tree{Entries: []object.TreeEntry{subEntry}}
+	subObj := repo.gogit.Storer.NewEncodedObject()
+	subTree.Encode(subObj)
+	subHash, err := storeObject(repo, subObj)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	topEntry := object.TreeEntry{Name: prefix, Mode: filemode.Dir, Hash: subHash}
+	topTree := &object.Tree{Entries: []object.TreeEntry{topEntry}}
+	topObj := repo.gogit.Storer.NewEncodedObject()
+	topTree.Encode(topObj)
+	topHash, err := storeObject(repo, topObj)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := repo.gogit.TreeObject(topHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loaded
+}
+
+func TestBuildNotesTreeFanout(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	blobHash, _ := repo.StoreBlob("fanout note content\n")
+	blobPlumb := plumbing.NewHash(blobHash)
+	topTree := storeFanoutTree(t, repo, hash, blobPlumb)
+
+	if !detectFanout(topTree) {
+		t.Fatal("expected fan-out tree")
+	}
+
+	// Add a new entry with a different prefix.
+	addCommit(t, repo, "extra.txt", "x", "another commit")
+	hash2, _ := repo.GetCommitHash("HEAD")
+	blobHash2, _ := repo.StoreBlob("second fanout note\n")
+	blobPlumb2 := plumbing.NewHash(blobHash2)
+
+	newTreeHash, err := repo.buildNotesTree(topTree, hash2, blobPlumb2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newTreeHash.IsZero() {
+		t.Error("expected non-zero tree hash")
+	}
+}
+
+func TestBuildNotesTreeFanoutSamePrefix(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	blobHash, _ := repo.StoreBlob("existing note\n")
+	blobPlumb := plumbing.NewHash(blobHash)
+
+	// Create a fan-out subtree with TWO entries: the target and another one.
+	// This exercises the "keep other entries" path (line 1251).
+	prefix := hash[:2]
+	suffix := hash[2:]
+	otherSuffix := "0000000000000000000000000000000000000000"[2:]
+
+	subEntries := []object.TreeEntry{
+		{Name: otherSuffix, Mode: filemode.Regular, Hash: blobPlumb},
+		{Name: suffix, Mode: filemode.Regular, Hash: blobPlumb},
+	}
+	subTree := &object.Tree{Entries: subEntries}
+	subObj := repo.gogit.Storer.NewEncodedObject()
+	subTree.Encode(subObj)
+	subHash, _ := storeObject(repo, subObj)
+
+	topEntry := object.TreeEntry{Name: prefix, Mode: filemode.Dir, Hash: subHash}
+	topTree := &object.Tree{Entries: []object.TreeEntry{topEntry}}
+	topObj := repo.gogit.Storer.NewEncodedObject()
+	topTree.Encode(topObj)
+	topHash, _ := storeObject(repo, topObj)
+	loaded, err := repo.gogit.TreeObject(topHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Build with same revision (replace existing entry, keep other).
+	newBlobHash, _ := repo.StoreBlob("replacement note\n")
+	newBlobPlumb := plumbing.NewHash(newBlobHash)
+	newTreeHash, err := repo.buildNotesTree(loaded, hash, newBlobPlumb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newTreeHash.IsZero() {
+		t.Error("expected non-zero tree hash")
+	}
+}
+
+func TestBuildNotesTreeFanoutStoreError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	blobHash, _ := repo.StoreBlob("note\n")
+	blobPlumb := plumbing.NewHash(blobHash)
+	topTree := storeFanoutTree(t, repo, hash, blobPlumb)
+
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.TreeObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected error")
+		}
+		return orig(r, obj)
+	}
+
+	newBlobHash, _ := repo.StoreBlob("new note\n")
+	newBlobPlumb := plumbing.NewHash(newBlobHash)
+	_, err := repo.buildNotesTree(topTree, hash, newBlobPlumb)
+	if err == nil {
+		t.Error("expected error from buildNotesTree when storeObject fails")
+	}
+}
+
+func TestBuildNotesTreeFanoutNewPrefixStoreError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	blobHash, _ := repo.StoreBlob("note\n")
+	blobPlumb := plumbing.NewHash(blobHash)
+
+	// Create fan-out tree with a different prefix ("zz") than hash[:2].
+	// We need to store and load it properly.
+	prefix := "zz"
+	suffix := hash[2:]
+
+	subEntry := object.TreeEntry{Name: suffix, Mode: filemode.Regular, Hash: blobPlumb}
+	subTree := &object.Tree{Entries: []object.TreeEntry{subEntry}}
+	subObj := repo.gogit.Storer.NewEncodedObject()
+	subTree.Encode(subObj)
+	subHash, _ := storeObject(repo, subObj)
+
+	topEntry := object.TreeEntry{Name: prefix, Mode: filemode.Dir, Hash: subHash}
+	topTree := &object.Tree{Entries: []object.TreeEntry{topEntry}}
+	topObj := repo.gogit.Storer.NewEncodedObject()
+	topTree.Encode(topObj)
+	topHash, _ := storeObject(repo, topObj)
+	loaded, err := repo.gogit.TreeObject(topHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	orig := storeObject
+	defer func() { storeObject = orig }()
+	storeObject = func(r *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+		if obj.Type() == plumbing.TreeObject {
+			return plumbing.ZeroHash, fmt.Errorf("injected error")
+		}
+		return orig(r, obj)
+	}
+
+	newBlobHash, _ := repo.StoreBlob("new\n")
+	newBlobPlumb := plumbing.NewHash(newBlobHash)
+	_, err = repo.buildNotesTree(loaded, hash, newBlobPlumb)
+	if err == nil {
+		t.Error("expected error from buildNotesTree when new prefix subtree store fails")
+	}
+}
+
+func TestGetNotesFanout(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	// Create a fan-out notes tree and point a ref to it.
+	blobHash, _ := repo.StoreBlob("fanout note\n")
+	blobPlumb := plumbing.NewHash(blobHash)
+	topTree := storeFanoutTree(t, repo, hash, blobPlumb)
+
+	// Create a notes commit pointing to this tree.
+	sig := object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()}
+	c := &object.Commit{Author: sig, Committer: sig, Message: "notes\n", TreeHash: topTree.Hash}
+	cObj := repo.gogit.Storer.NewEncodedObject()
+	c.Encode(cObj)
+	cHash, _ := storeObject(repo, cObj)
+	repo.SetRef("refs/notes/fantest", cHash.String(), "")
+
+	// GetNotes should find the note via fan-out lookup.
+	notes := repo.GetNotes("refs/notes/fantest", hash)
+	if len(notes) == 0 {
+		t.Error("expected to find notes via fan-out lookup")
+	}
+
+	// GetAllNotes should also work.
+	allNotes, err := repo.GetAllNotes("refs/notes/fantest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allNotes) == 0 {
+		t.Error("expected at least one entry from GetAllNotes with fan-out tree")
+	}
+
+	// ListNotedRevisions should find the commit.
+	revisions := repo.ListNotedRevisions("refs/notes/fantest")
+	found := false
+	for _, r := range revisions {
+		if r == hash {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected ListNotedRevisions to find the noted commit in fan-out tree")
+	}
+}
+
+func TestGetNotesReadBlobContentError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	// Create a notes tree with a bogus blob hash.
+	bogusBlobHash := plumbing.NewHash("0000000000000000000000000000000000000001")
+	entry := object.TreeEntry{Name: hash, Mode: filemode.Regular, Hash: bogusBlobHash}
+	tree := &object.Tree{Entries: []object.TreeEntry{entry}}
+	treeObj := repo.gogit.Storer.NewEncodedObject()
+	tree.Encode(treeObj)
+	treeHash, _ := storeObject(repo, treeObj)
+
+	sig := object.Signature{Name: "T", Email: "t@t.com", When: time.Now()}
+	c := &object.Commit{Author: sig, Committer: sig, Message: "n\n", TreeHash: treeHash}
+	cObj := repo.gogit.Storer.NewEncodedObject()
+	c.Encode(cObj)
+	cHash, _ := storeObject(repo, cObj)
+	repo.SetRef("refs/notes/badblob", cHash.String(), "")
+
+	// GetNotes should return nil when blob can't be read.
+	notes := repo.GetNotes("refs/notes/badblob", hash)
+	if notes != nil {
+		t.Error("expected nil notes when blob is unreadable")
+	}
+
+	// GetAllNotes should skip entries with unreadable blobs.
+	allNotes, err := repo.GetAllNotes("refs/notes/badblob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allNotes) != 0 {
+		t.Error("expected no notes when blob is unreadable")
+	}
+}
+
+func TestReadNotesCommitReferenceError(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Create a symbolic ref that points to a non-existent target.
+	// This makes Reference(ref, true) fail with a non-ErrReferenceNotFound error.
+	orig := gogitReferences
+	defer func() { gogitReferences = orig }()
+
+	// Actually, readNotesCommit uses repo.gogit.Reference directly, not the test seam.
+	// The simplest way is to test the "ref exists but resolveToCommit fails" path.
+	// Create a ref pointing to a blob (not a commit).
+	blobHash, _ := repo.StoreBlob("not a commit")
+	repo.SetRef("refs/notes/noncommit", blobHash, "")
+
+	_, err := repo.readNotesCommit("refs/notes/noncommit")
+	if err == nil {
+		t.Error("expected error from readNotesCommit when ref points to non-commit")
+	}
+}
+
+func TestMergeNotesRefReadBlobError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	// Create local and remote notes with different blobs, then corrupt one.
+	if err := repo.AppendNote("refs/notes/local", hash, Note("local")); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AppendNote("refs/notes/remotes/origin/local", hash, Note("remote")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now replace the local note's blob with a bogus hash to trigger readBlobContents error.
+	// Create a tree with the correct hash key but bogus blob.
+	bogusBlobHash := plumbing.NewHash("0000000000000000000000000000000000000001")
+	entry := object.TreeEntry{Name: hash, Mode: filemode.Regular, Hash: bogusBlobHash}
+	tree := &object.Tree{Entries: []object.TreeEntry{entry}}
+	treeObj := repo.gogit.Storer.NewEncodedObject()
+	tree.Encode(treeObj)
+	treeHash, _ := storeObject(repo, treeObj)
+
+	// Get the existing local commit to use as parent.
+	localCommit, _ := repo.readNotesCommit("refs/notes/local")
+	sig := object.Signature{Name: "T", Email: "t@t.com", When: time.Now()}
+	c := &object.Commit{
+		Author: sig, Committer: sig, Message: "corrupt\n",
+		TreeHash: treeHash, ParentHashes: []plumbing.Hash{localCommit.Hash},
+	}
+	cObj := repo.gogit.Storer.NewEncodedObject()
+	c.Encode(cObj)
+	cHash, _ := storeObject(repo, cObj)
+	repo.SetRef("refs/notes/local", cHash.String(), localCommit.Hash.String())
+
+	// mergeNotesRef should fail when trying to read the corrupt local blob.
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/local")
+	if err == nil {
+		t.Error("expected error from mergeNotesRef when blob is unreadable")
+	}
+}
+
+func TestLookupNoteEntryBadSubtree(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	// Create a tree with a directory entry pointing to a bogus hash.
+	// lookupNoteEntry should skip it (tree.Tree returns error → continue).
+	prefix := hash[:2]
+	bogusSubHash := plumbing.NewHash("0000000000000000000000000000000000000001")
+	topEntry := object.TreeEntry{Name: prefix, Mode: filemode.Dir, Hash: bogusSubHash}
+	topTree := &object.Tree{Entries: []object.TreeEntry{topEntry}}
+	topObj := repo.gogit.Storer.NewEncodedObject()
+	topTree.Encode(topObj)
+	topHash, _ := storeObject(repo, topObj)
+	loaded, err := repo.gogit.TreeObject(topHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// lookupNoteEntry should fail (bad subtree) but not panic.
+	_, err = lookupNoteEntry(loaded, hash)
+	if err == nil {
+		t.Error("expected error from lookupNoteEntry with bogus subtree")
+	}
+}
+
+func TestMergeNotesRefRemoteBlobError(t *testing.T) {
+	repo := setupTestRepo(t)
+	hash, _ := repo.GetCommitHash("HEAD")
+
+	// Create local notes normally.
+	if err := repo.AppendNote("refs/notes/local", hash, Note("local")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create remote notes with a bogus blob hash for the same commit.
+	bogusBlobHash := plumbing.NewHash("0000000000000000000000000000000000000001")
+	entry := object.TreeEntry{Name: hash, Mode: filemode.Regular, Hash: bogusBlobHash}
+	tree := &object.Tree{Entries: []object.TreeEntry{entry}}
+	treeObj := repo.gogit.Storer.NewEncodedObject()
+	tree.Encode(treeObj)
+	treeHash, _ := storeObject(repo, treeObj)
+
+	sig := object.Signature{Name: "T", Email: "t@t.com", When: time.Now()}
+	c := &object.Commit{Author: sig, Committer: sig, Message: "n\n", TreeHash: treeHash}
+	cObj := repo.gogit.Storer.NewEncodedObject()
+	c.Encode(cObj)
+	cHash, _ := storeObject(repo, cObj)
+	repo.SetRef("refs/notes/remotes/origin/local", cHash.String(), "")
+
+	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/local")
+	if err == nil {
+		t.Error("expected error from mergeNotesRef when remote blob is unreadable")
+	}
+}
+
+func TestDiffTreeNamesFromNameBranch(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Create a commit where a file is deleted to get From.Name set.
+	hash1, _ := repo.GetCommitHash("HEAD")
+	addCommit(t, repo, "to_delete.txt", "content", "add file")
+	hash2, _ := repo.GetCommitHash("HEAD")
+	// Delete the file.
+	os.Remove(filepath.Join(repo.Path, "to_delete.txt"))
+	gitRun(t, repo.Path, "add", "-A")
+	gitRun(t, repo.Path, "commit", "-m", "delete file")
+	hash3, _ := repo.GetCommitHash("HEAD")
+
+	// Diff from hash2→hash3 should show to_delete.txt via From.Name.
+	names, err := repo.diffTreeNames(hash2, hash3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, n := range names {
+		if n == "to_delete.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'to_delete.txt' in diff from deletion, got %v", names)
+	}
+	_ = hash1
 }

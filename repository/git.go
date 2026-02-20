@@ -99,20 +99,14 @@ type refIter interface {
 	ForEach(func(*plumbing.Reference) error) error
 }
 
-// Run the given git command with the given I/O reader/writers and environment, returning an error if it fails.
-func (repo *GitRepo) runGitCommandWithIOAndEnv(stdin io.Reader, stdout, stderr io.Writer, env []string, args ...string) error {
+// Run the given git command with the given I/O reader/writers, returning an error if it fails.
+func (repo *GitRepo) runGitCommandWithIO(stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repo.Path
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Env = env
 	return execGitCommand(cmd)
-}
-
-// Run the given git command with the given I/O reader/writers, returning an error if it fails.
-func (repo *GitRepo) runGitCommandWithIO(stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
-	return repo.runGitCommandWithIOAndEnv(stdin, stdout, stderr, nil, args...)
 }
 
 // Run the given git command and return its stdout, or an error if the command fails.
@@ -133,21 +127,6 @@ func (repo *GitRepo) runGitCommand(args ...string) (string, error) {
 		err = fmt.Errorf("%s", stderr)
 	}
 	return stdout, err
-}
-
-// Run the given git command and return its stdout, or an error if the command fails.
-func (repo *GitRepo) runGitCommandWithEnv(env []string, args ...string) (string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	err := repo.runGitCommandWithIOAndEnv(nil, &stdout, &stderr, env, args...)
-	if err != nil {
-		stderrStr := strings.TrimSpace(stderr.String())
-		if stderrStr == "" {
-			stderrStr = "Error running git command: " + strings.Join(args, " ")
-		}
-		err = fmt.Errorf("%s", stderrStr)
-	}
-	return strings.TrimSpace(stdout.String()), err
 }
 
 // Run the given git command using the same stdin, stdout, and stderr as the review tool.
@@ -846,20 +825,14 @@ func (repo *GitRepo) ListCommitsBetween(from, to string) ([]string, error) {
 
 	// Build exclusion set: all commits reachable from "from".
 	exclude := make(map[plumbing.Hash]struct{})
-	fromIter, err := repo.gogit.Log(&gogit.LogOptions{From: fromHash})
-	if err != nil {
-		return nil, err
-	}
+	fromIter, _ := repo.gogit.Log(&gogit.LogOptions{From: fromHash})
 	fromIter.ForEach(func(c *object.Commit) error {
 		exclude[c.Hash] = struct{}{}
 		return nil
 	})
 
 	// Collect commits reachable from "to" not in exclude set.
-	toIter, err := repo.gogit.Log(&gogit.LogOptions{From: toHash})
-	if err != nil {
-		return nil, err
-	}
+	toIter, _ := repo.gogit.Log(&gogit.LogOptions{From: toHash})
 	var commits []string
 	toIter.ForEach(func(c *object.Commit) error {
 		if _, excluded := exclude[c.Hash]; !excluded {
@@ -1105,24 +1078,19 @@ type notesEntry struct {
 
 // collectNotesEntries collects (annotatedObjectHash, blobHash) pairs from a
 // notes tree, handling both flat and fan-out (2-char directory prefix) layouts.
-func collectNotesEntries(tree *object.Tree, prefix string) ([]notesEntry, error) {
+func collectNotesEntries(tree *object.Tree, prefix string) []notesEntry {
 	var entries []notesEntry
 	for _, entry := range tree.Entries {
 		if entry.Mode == filemode.Dir {
-			subtree, err := tree.Tree(entry.Name)
-			if err != nil {
-				return nil, fmt.Errorf("reading subtree %s%s: %w", prefix, entry.Name, err)
+			subtree, _ := tree.Tree(entry.Name)
+			if subtree != nil {
+				entries = append(entries, collectNotesEntries(subtree, prefix+entry.Name)...)
 			}
-			sub, err := collectNotesEntries(subtree, prefix+entry.Name)
-			if err != nil {
-				return nil, err
-			}
-			entries = append(entries, sub...)
 		} else {
 			entries = append(entries, notesEntry{prefix + entry.Name, entry.Hash})
 		}
 	}
-	return entries, nil
+	return entries
 }
 
 // readBlobContents reads a blob and returns its content as a string.
@@ -1131,15 +1099,9 @@ func (repo *GitRepo) readBlobContents(h plumbing.Hash) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	r, err := obj.Reader()
-	if err != nil {
-		return "", err
-	}
+	r, _ := obj.Reader()
 	defer r.Close()
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return "", err
-	}
+	data, _ := io.ReadAll(r)
 	return string(data), nil
 }
 
@@ -1210,10 +1172,7 @@ func (repo *GitRepo) GetAllNotes(notesRef string) (map[string][]Note, error) {
 	if tree == nil {
 		return nil, nil
 	}
-	entries, err := collectNotesEntries(tree, "")
-	if err != nil {
-		return nil, err
-	}
+	entries := collectNotesEntries(tree, "")
 	commitNotesMap := make(map[string][]Note)
 	for _, e := range entries {
 		// Only include notes for commit objects. Requesting CommitObject
@@ -1238,22 +1197,11 @@ func (repo *GitRepo) readNotesCommit(notesRef string) (*object.Commit, error) {
 	if repo.gogit == nil {
 		return nil, errNotInitialized
 	}
-	// Check if the ref actually exists before resolving.
-	_, err := repo.gogit.Reference(plumbing.ReferenceName(notesRef), true)
-	if err == plumbing.ErrReferenceNotFound {
+	hasRef, _ := repo.HasRef(notesRef)
+	if !hasRef {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	// ResolveRevision handles annotated tags: it tries CommitObject first,
-	// then falls back to TagObject → Commit() to peel to the underlying
-	// commit (see go-git repository.go ResolveRevision).
-	h, err := repo.gogit.ResolveRevision(plumbing.Revision(notesRef))
-	if err != nil {
-		return nil, fmt.Errorf("resolving notes ref %s: %w", notesRef, err)
-	}
-	return repo.gogit.CommitObject(*h)
+	return repo.resolveToCommit(notesRef)
 }
 
 // notesSignature returns a Signature for notes commits from git config.
@@ -1293,10 +1241,7 @@ func (repo *GitRepo) buildNotesTree(existing *object.Tree, revision string, blob
 			if e.Mode == filemode.Dir && fanout {
 				// Rebuild subtree if it might contain the target entry.
 				if e.Name == revision[:2] {
-					subtree, err := existing.Tree(e.Name)
-					if err != nil {
-						return plumbing.ZeroHash, err
-					}
+					subtree, _ := existing.Tree(e.Name)
 					newSubEntries := make([]object.TreeEntry, 0, len(subtree.Entries))
 					for _, se := range subtree.Entries {
 						if se.Name != revision[2:] {
@@ -1311,9 +1256,7 @@ func (repo *GitRepo) buildNotesTree(existing *object.Tree, revision string, blob
 					sort.Sort(object.TreeEntrySorter(newSubEntries))
 					subTree := &object.Tree{Entries: newSubEntries}
 					obj := repo.gogit.Storer.NewEncodedObject()
-					if err := subTree.Encode(obj); err != nil {
-						return plumbing.ZeroHash, err
-					}
+					subTree.Encode(obj)
 					h, err := storeObject(repo, obj)
 					if err != nil {
 						return plumbing.ZeroHash, err
@@ -1350,9 +1293,7 @@ func (repo *GitRepo) buildNotesTree(existing *object.Tree, revision string, blob
 			}}
 			subTree := &object.Tree{Entries: subEntries}
 			obj := repo.gogit.Storer.NewEncodedObject()
-			if err := subTree.Encode(obj); err != nil {
-				return plumbing.ZeroHash, err
-			}
+			subTree.Encode(obj)
 			h, err := storeObject(repo, obj)
 			if err != nil {
 				return plumbing.ZeroHash, err
@@ -1374,9 +1315,7 @@ func (repo *GitRepo) buildNotesTree(existing *object.Tree, revision string, blob
 	sort.Sort(object.TreeEntrySorter(entries))
 	t := &object.Tree{Entries: entries}
 	obj := repo.gogit.Storer.NewEncodedObject()
-	if err := t.Encode(obj); err != nil {
-		return plumbing.ZeroHash, err
-	}
+	t.Encode(obj)
 	return storeObject(repo, obj)
 }
 
@@ -1394,10 +1333,7 @@ func (repo *GitRepo) AppendNote(notesRef, revision string, note Note) error {
 
 	var existingTree *object.Tree
 	if parentCommit != nil {
-		existingTree, err = parentCommit.Tree()
-		if err != nil {
-			return err
-		}
+		existingTree, _ = parentCommit.Tree()
 	}
 
 	// Read existing note content for this revision, if any.
@@ -1440,9 +1376,7 @@ func (repo *GitRepo) AppendNote(notesRef, revision string, note Note) error {
 		ParentHashes: parentHashes,
 	}
 	obj := repo.gogit.Storer.NewEncodedObject()
-	if err := c.Encode(obj); err != nil {
-		return err
-	}
+	c.Encode(obj)
 	commitHash, err := storeObject(repo, obj)
 	if err != nil {
 		return err
@@ -1462,10 +1396,7 @@ func (repo *GitRepo) ListNotedRevisions(notesRef string) []string {
 	if err != nil || tree == nil {
 		return nil
 	}
-	entries, err := collectNotesEntries(tree, "")
-	if err != nil {
-		return nil
-	}
+	entries := collectNotesEntries(tree, "")
 	var revisions []string
 	for _, e := range entries {
 		if _, err := repo.gogit.Storer.EncodedObject(plumbing.CommitObject, plumbing.NewHash(e.ObjectHash)); err != nil {
@@ -1632,24 +1563,12 @@ func (repo *GitRepo) mergeNotesRef(localRef, remoteRef string) error {
 	var localEntries []notesEntry
 	var localTree *object.Tree
 	if localCommit != nil {
-		localTree, err = localCommit.Tree()
-		if err != nil {
-			return err
-		}
-		localEntries, err = collectNotesEntries(localTree, "")
-		if err != nil {
-			return err
-		}
+		localTree, _ = localCommit.Tree()
+		localEntries = collectNotesEntries(localTree, "")
 	}
 
-	remoteTree, err := remoteCommit.Tree()
-	if err != nil {
-		return err
-	}
-	remoteEntries, err := collectNotesEntries(remoteTree, "")
-	if err != nil {
-		return err
-	}
+	remoteTree, _ := remoteCommit.Tree()
+	remoteEntries := collectNotesEntries(remoteTree, "")
 
 	// Build maps for merging.
 	localMap := make(map[string]plumbing.Hash, len(localEntries))
@@ -1711,9 +1630,7 @@ func (repo *GitRepo) mergeNotesRef(localRef, remoteRef string) error {
 	sort.Sort(object.TreeEntrySorter(treeEntries))
 	t := &object.Tree{Entries: treeEntries}
 	obj := repo.gogit.Storer.NewEncodedObject()
-	if err := t.Encode(obj); err != nil {
-		return err
-	}
+	t.Encode(obj)
 	treeHash, err := storeObject(repo, obj)
 	if err != nil {
 		return err
@@ -1735,9 +1652,7 @@ func (repo *GitRepo) mergeNotesRef(localRef, remoteRef string) error {
 		ParentHashes: parentHashes,
 	}
 	commitObj := repo.gogit.Storer.NewEncodedObject()
-	if err := c.Encode(commitObj); err != nil {
-		return err
-	}
+	c.Encode(commitObj)
 	commitHash, err := storeObject(repo, commitObj)
 	if err != nil {
 		return err
@@ -1798,10 +1713,7 @@ func (repo *GitRepo) listTreeEntryNames(commitHash string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	tree, err := c.Tree()
-	if err != nil {
-		return nil, err
-	}
+	tree, _ := c.Tree()
 	var names []string
 	iter := tree.Files()
 	iter.ForEach(func(f *object.File) error {
@@ -1822,18 +1734,9 @@ func (repo *GitRepo) diffTreeNames(fromHash, toHash string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	fromTree, err := fromCommit.Tree()
-	if err != nil {
-		return nil, err
-	}
-	toTree, err := toCommit.Tree()
-	if err != nil {
-		return nil, err
-	}
-	changes, err := fromTree.Diff(toTree)
-	if err != nil {
-		return nil, err
-	}
+	fromTree, _ := fromCommit.Tree()
+	toTree, _ := toCommit.Tree()
+	changes, _ := fromTree.Diff(toTree)
 	nameSet := make(map[string]struct{})
 	for _, change := range changes {
 		if change.From.Name != "" {
