@@ -13,9 +13,6 @@ pre-commit:
     go-build:
       glob: "*.go"
       run: go build ./...
-
-pre-push:
-  commands:
     test-coverage:
       glob: "*.go"
       run: >-
