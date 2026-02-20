@@ -22,6 +22,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -1182,17 +1183,26 @@ func (repo *GitRepo) GetAllNotes(notesRef string) (map[string][]Note, error) {
 }
 
 // readNotesCommit resolves a notes ref to its commit object.
-// Returns nil, nil if the ref doesn't exist.
+// Returns nil, nil if the ref doesn't exist. Returns an error if the
+// ref exists but doesn't point to a commit (e.g. corrupt ref).
 func (repo *GitRepo) readNotesCommit(notesRef string) (*object.Commit, error) {
 	if repo.gogit == nil {
 		return nil, errNotInitialized
 	}
-	h, err := repo.gogit.ResolveRevision(plumbing.Revision(notesRef))
+	// Check if the ref actually exists before resolving.
+	_, err := repo.gogit.Reference(plumbing.ReferenceName(notesRef), true)
 	if err == plumbing.ErrReferenceNotFound {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	// ResolveRevision handles annotated tags: it tries CommitObject first,
+	// then falls back to TagObject → Commit() to peel to the underlying
+	// commit (see go-git repository.go ResolveRevision).
+	h, err := repo.gogit.ResolveRevision(plumbing.Revision(notesRef))
+	if err != nil {
+		return nil, fmt.Errorf("resolving notes ref %s: %w", notesRef, err)
 	}
 	return repo.gogit.CommitObject(*h)
 }
@@ -1512,6 +1522,23 @@ func getLocalNotesRef(remote, remoteNotesRef string) string {
 
 // MergeNotes merges in the remote's state of the notes reference into the
 // local repository's.
+// catSortUniq implements the cat_sort_uniq merge strategy: concatenate lines
+// from both sources, sort, and deduplicate.
+func catSortUniq(local, remote string) string {
+	lines := make(map[string]struct{})
+	for line := range strings.SplitSeq(local, "\n") {
+		if line != "" {
+			lines[line] = struct{}{}
+		}
+	}
+	for line := range strings.SplitSeq(remote, "\n") {
+		if line != "" {
+			lines[line] = struct{}{}
+		}
+	}
+	return strings.Join(slices.Sorted(maps.Keys(lines)), "\n")
+}
+
 func (repo *GitRepo) MergeNotes(remote, notesRefPattern string) error {
 	remoteRefPattern := getRemoteNotesRef(remote, notesRefPattern)
 	refsMap, err := repo.getRefHashes(remoteRefPattern)
@@ -1520,11 +1547,147 @@ func (repo *GitRepo) MergeNotes(remote, notesRefPattern string) error {
 	}
 	for remoteRef := range refsMap {
 		localRef := getLocalNotesRef(remote, remoteRef)
-		if _, err := repo.runGitCommand("notes", "--ref", localRef, "merge", remoteRef, "-s", "cat_sort_uniq"); err != nil {
+		if err := repo.mergeNotesRef(localRef, remoteRef); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// mergeNotesRef merges a remote notes ref into a local notes ref using
+// the cat_sort_uniq strategy.
+func (repo *GitRepo) mergeNotesRef(localRef, remoteRef string) error {
+	localCommit, err := repo.readNotesCommit(localRef)
+	if err != nil {
+		return err
+	}
+	remoteCommit, err := repo.readNotesCommit(remoteRef)
+	if err != nil {
+		return err
+	}
+	if remoteCommit == nil {
+		return nil
+	}
+
+	var localEntries []notesEntry
+	var localTree *object.Tree
+	if localCommit != nil {
+		localTree, err = localCommit.Tree()
+		if err != nil {
+			return err
+		}
+		localEntries, err = collectNotesEntries(localTree, "")
+		if err != nil {
+			return err
+		}
+	}
+
+	remoteTree, err := remoteCommit.Tree()
+	if err != nil {
+		return err
+	}
+	remoteEntries, err := collectNotesEntries(remoteTree, "")
+	if err != nil {
+		return err
+	}
+
+	// Build maps for merging.
+	localMap := make(map[string]plumbing.Hash, len(localEntries))
+	for _, e := range localEntries {
+		localMap[e.ObjectHash] = e.BlobHash
+	}
+	remoteMap := make(map[string]plumbing.Hash, len(remoteEntries))
+	for _, e := range remoteEntries {
+		remoteMap[e.ObjectHash] = e.BlobHash
+	}
+
+	// Merge: union of all keys, cat_sort_uniq for conflicts.
+	allKeys := make(map[string]struct{})
+	for k := range localMap {
+		allKeys[k] = struct{}{}
+	}
+	for k := range remoteMap {
+		allKeys[k] = struct{}{}
+	}
+
+	// Build flat notes tree entries.
+	var treeEntries []object.TreeEntry
+	for objHash := range allKeys {
+		localBlobHash, inLocal := localMap[objHash]
+		remoteBlobHash, inRemote := remoteMap[objHash]
+
+		var blobHash plumbing.Hash
+		switch {
+		case inLocal && inRemote && localBlobHash == remoteBlobHash:
+			blobHash = localBlobHash
+		case inLocal && inRemote:
+			localContent, err := repo.readBlobContents(localBlobHash)
+			if err != nil {
+				return err
+			}
+			remoteContent, err := repo.readBlobContents(remoteBlobHash)
+			if err != nil {
+				return err
+			}
+			merged := catSortUniq(localContent, remoteContent) + "\n"
+			hashStr, err := repo.StoreBlob(merged)
+			if err != nil {
+				return err
+			}
+			blobHash = plumbing.NewHash(hashStr)
+		case inLocal:
+			blobHash = localBlobHash
+		default:
+			blobHash = remoteBlobHash
+		}
+
+		treeEntries = append(treeEntries, object.TreeEntry{
+			Name: objHash,
+			Mode: filemode.Regular,
+			Hash: blobHash,
+		})
+	}
+
+	sort.Sort(object.TreeEntrySorter(treeEntries))
+	t := &object.Tree{Entries: treeEntries}
+	obj := repo.gogit.Storer.NewEncodedObject()
+	if err := t.Encode(obj); err != nil {
+		return err
+	}
+	treeHash, err := storeObject(repo, obj)
+	if err != nil {
+		return err
+	}
+
+	// Create merge commit (or regular commit if local didn't exist).
+	sig := repo.notesSignature()
+	var parentHashes []plumbing.Hash
+	if localCommit != nil {
+		parentHashes = append(parentHashes, localCommit.Hash)
+	}
+	parentHashes = append(parentHashes, remoteCommit.Hash)
+
+	c := &object.Commit{
+		Author:       sig,
+		Committer:    sig,
+		Message:      "notes merge by go-git\n",
+		TreeHash:     treeHash,
+		ParentHashes: parentHashes,
+	}
+	commitObj := repo.gogit.Storer.NewEncodedObject()
+	if err := c.Encode(commitObj); err != nil {
+		return err
+	}
+	commitHash, err := storeObject(repo, commitObj)
+	if err != nil {
+		return err
+	}
+
+	var previousHash string
+	if localCommit != nil {
+		previousHash = localCommit.Hash.String()
+	}
+	return repo.SetRef(localRef, commitHash.String(), previousHash)
 }
 
 // PullNotes fetches the contents of the given notes ref from a remote repo,
