@@ -812,14 +812,46 @@ func (repo *GitRepo) ListCommits(ref string) []string {
 //
 // The generated list is in chronological order (with the oldest commit first).
 func (repo *GitRepo) ListCommitsBetween(from, to string) ([]string, error) {
-	out, err := repo.runGitCommand("rev-list", "--reverse", from+".."+to)
+	if repo.gogit == nil {
+		return nil, errNotInitialized
+	}
+	fromHash, err := repo.resolveRevision(from)
 	if err != nil {
 		return nil, err
 	}
-	if out == "" {
+	toHash, err := repo.resolveRevision(to)
+	if err != nil {
+		return nil, err
+	}
+	if fromHash == toHash {
 		return nil, nil
 	}
-	return strings.Split(out, "\n"), nil
+
+	// Build exclusion set: all commits reachable from "from".
+	exclude := make(map[plumbing.Hash]struct{})
+	fromIter, err := repo.gogit.Log(&gogit.LogOptions{From: fromHash})
+	if err != nil {
+		return nil, err
+	}
+	fromIter.ForEach(func(c *object.Commit) error {
+		exclude[c.Hash] = struct{}{}
+		return nil
+	})
+
+	// Collect commits reachable from "to" not in exclude set.
+	toIter, err := repo.gogit.Log(&gogit.LogOptions{From: toHash})
+	if err != nil {
+		return nil, err
+	}
+	var commits []string
+	toIter.ForEach(func(c *object.Commit) error {
+		if _, excluded := exclude[c.Hash]; !excluded {
+			commits = append(commits, c.Hash.String())
+		}
+		return nil
+	})
+	slices.Reverse(commits)
+	return commits, nil
 }
 
 // StoreBlob writes the given file to the repository and returns its hash.
