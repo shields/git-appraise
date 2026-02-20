@@ -22,10 +22,10 @@ func GetDate(timestamp string) (*time.Time, error) {
 		var date time.Time
 		var err error
 
-		// <unix timestamp> <time zone offset>
+		// <unix timestamp> <time zone offset> or @<unix timestamp> <time zone offset>
 		ary := strings.Split(timestampStr, " ")
 		if len(ary) == 2 {
-			unixTimestamp := ary[0]
+			unixTimestamp := strings.TrimPrefix(ary[0], "@")
 			intTimestamp, innerErr := strconv.ParseInt(unixTimestamp, 10, 64)
 			if innerErr == nil {
 				timeZoneOffset := ary[1]

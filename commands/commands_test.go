@@ -19,6 +19,14 @@ import (
 	"msrl.dev/git-appraise/review/request"
 )
 
+// TestMain clears git date env vars that may leak from a pre-commit hook
+// context (e.g., git commit --amend sets GIT_AUTHOR_DATE=@epoch).
+func TestMain(m *testing.M) {
+	os.Unsetenv("GIT_AUTHOR_DATE")
+	os.Unsetenv("GIT_COMMITTER_DATE")
+	os.Exit(m.Run())
+}
+
 // captureStdout redirects os.Stdout to capture printed output.
 // Not safe for parallel use; none of these tests call t.Parallel().
 // If f() panics, the deferred w.Close() unblocks the reader goroutine

@@ -127,9 +127,9 @@ func TestReposDiscoverNonGitDir(t *testing.T) {
 }
 
 func TestReposDiscoverEmptyGitRepo(t *testing.T) {
-	// An empty git repo (no commits) causes Update() to fail because
-	// GetRepoStateHash calls "git show-ref" which exits non-zero in
-	// a repo with no refs. This exercises the Update error path.
+	// An empty git repo (no commits) is still a valid git repo.
+	// GetRepoStateHash succeeds (empty ref list → valid hash)
+	// and Update completes, so the repo is discovered.
 	dir := t.TempDir()
 	emptyRepo := dir + "/empty-repo"
 	os.Mkdir(emptyRepo, 0755)
@@ -150,10 +150,9 @@ func TestReposDiscoverEmptyGitRepo(t *testing.T) {
 	if err := repos.Discover(); err != nil {
 		t.Fatal(err)
 	}
-	// The empty repo should be skipped (Update error), so no repos found
 	loaded := repos.Load()
-	if len(loaded) != 0 {
-		t.Errorf("expected no repos (Update should fail for empty repo), got %d", len(loaded))
+	if len(loaded) != 1 {
+		t.Errorf("expected 1 repo (empty repo is still valid), got %d", len(loaded))
 	}
 }
 
@@ -197,6 +196,34 @@ func TestReposDiscoverGetwdError(t *testing.T) {
 	err := repos.Discover()
 	if err == nil {
 		t.Error("expected error when Getwd fails")
+	}
+}
+
+func TestReposDiscoverUpdateError(t *testing.T) {
+	dir := t.TempDir()
+	repoDir := dir + "/broken-repo"
+	cmd := exec.Command("git", "init", repoDir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+	// Corrupt packed-refs so GetRepoStateHash → References() fails.
+	os.WriteFile(repoDir+"/.git/packed-refs", []byte("corrupt\x00data\n"), 0644)
+
+	old, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+
+	var repos Repos
+	m := make(reposMap)
+	repos.Store(&m)
+	if err := repos.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	loaded := repos.Load()
+	if len(loaded) != 0 {
+		t.Errorf("expected 0 repos (corrupt repo skipped), got %d", len(loaded))
 	}
 }
 

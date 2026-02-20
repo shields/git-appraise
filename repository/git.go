@@ -21,7 +21,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha1"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -30,8 +29,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
 const (
@@ -43,7 +49,8 @@ const (
 
 // GitRepo represents an instance of a (local) git repository.
 type GitRepo struct {
-	Path string
+	Path  string
+	gogit *gogit.Repository
 }
 
 // execGitCommand is a test seam for injecting command execution failures.
@@ -51,6 +58,45 @@ type GitRepo struct {
 // packages run sequentially by default; t.Parallel is not used).
 var execGitCommand = func(cmd *exec.Cmd) error {
 	return cmd.Run()
+}
+
+// storeObject is a test seam for injecting object-storage failures.
+var storeObject = func(repo *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
+	return repo.gogit.Storer.SetEncodedObject(obj)
+}
+
+// gogitConfig is a test seam for injecting config read failures.
+var gogitConfig = func(repo *GitRepo) (*config.Config, error) {
+	return repo.gogit.ConfigScoped(config.SystemScope)
+}
+
+// gogitStatus is a test seam for injecting worktree status failures.
+var gogitStatus = func(repo *GitRepo) (gogit.Status, error) {
+	wt, err := repo.gogit.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	return wt.Status()
+}
+
+// gogitHeadRef is a test seam for injecting HEAD reference read failures.
+var gogitHeadRef = func(repo *GitRepo) (*plumbing.Reference, error) {
+	return repo.gogit.Reference(plumbing.HEAD, false)
+}
+
+// gogitReferences is a test seam for injecting reference iterator failures.
+var gogitReferences = func(repo *GitRepo) (refIter, error) {
+	return repo.gogit.References()
+}
+
+// gogitRemotes is a test seam for injecting remote list failures.
+var gogitRemotes = func(repo *GitRepo) ([]*gogit.Remote, error) {
+	return repo.gogit.Remotes()
+}
+
+// refIter abstracts storer.ReferenceIter for the test seam.
+type refIter interface {
+	ForEach(func(*plumbing.Reference) error) error
 }
 
 // Run the given git command with the given I/O reader/writers and environment, returning an error if it fails.
@@ -112,39 +158,76 @@ func (repo *GitRepo) runGitCommandInline(args ...string) error {
 // NewGitRepo determines if the given working directory is inside of a git repository,
 // and returns the corresponding GitRepo instance if it is.
 func NewGitRepo(path string) (*GitRepo, error) {
-	repo := &GitRepo{Path: path}
-	_, _, err := repo.runGitCommandRaw("rev-parse")
-	if err == nil {
-		return repo, nil
+	// Try PlainOpen first (handles bare repos and exact paths), then fall
+	// back to DetectDotGit for opening from subdirectories.
+	r, err := gogit.PlainOpen(path)
+	if err == gogit.ErrRepositoryNotExists {
+		r, err = gogit.PlainOpenWithOptions(path, &gogit.PlainOpenOptions{
+			DetectDotGit: true,
+		})
 	}
-	if _, ok := err.(*exec.ExitError); ok {
+	if err != nil {
 		return nil, err
 	}
-	return nil, err
+	// go-git's Worktree() returns ErrIsBareRepository for bare repos
+	// and nil otherwise; no other error conditions exist.
+	wt, err := r.Worktree()
+	if err != nil {
+		return &GitRepo{Path: path, gogit: r}, nil
+	}
+	// Path is set to the repo root so GetDataDir and CLI commands operate
+	// from a consistent location. The remaining CLI methods (notes, diff,
+	// fetch, push, merge, rebase) use absolute refs and commit hashes,
+	// so running from the root rather than a subdirectory is correct.
+	return &GitRepo{Path: wt.Filesystem.Root(), gogit: r}, nil
+}
+
+var errNotInitialized = fmt.Errorf("repository not initialized")
+
+// resolveRevision resolves a ref string (which may be HEAD, a full ref, or a
+// commit hash) to a plumbing.Hash using go-git's ResolveRevision.
+func (repo *GitRepo) resolveRevision(ref string) (plumbing.Hash, error) {
+	if repo.gogit == nil {
+		return plumbing.ZeroHash, errNotInitialized
+	}
+	h, err := repo.gogit.ResolveRevision(plumbing.Revision(ref))
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+	return *h, nil
+}
+
+// resolveToCommit resolves a ref string to a commit object.
+func (repo *GitRepo) resolveToCommit(ref string) (*object.Commit, error) {
+	h, err := repo.resolveRevision(ref)
+	if err != nil {
+		return nil, err
+	}
+	return repo.gogit.CommitObject(h)
 }
 
 func (repo *GitRepo) HasRef(ref string) (bool, error) {
-	_, _, err := repo.runGitCommandRaw("show-ref", "--verify", "--quiet", ref)
-	if err == nil {
-		return true, nil
+	if repo.gogit == nil {
+		return false, errNotInitialized
 	}
-	if _, ok := err.(*exec.ExitError); ok {
+	_, err := repo.gogit.Reference(plumbing.ReferenceName(ref), false)
+	if err == plumbing.ErrReferenceNotFound {
 		return false, nil
 	}
-	// Got an unexpected error
-	return false, err
+	return err == nil, err
 }
 
 // HasObject returns whether or not the repo contains an object with the given hash.
 func (repo *GitRepo) HasObject(hash string) (bool, error) {
-	_, _, err := repo.runGitCommandRaw("cat-file", "-e", "--", hash)
-	if err == nil {
-		return true, nil
+	if repo.gogit == nil {
+		return false, errNotInitialized
 	}
-	if _, ok := err.(*exec.ExitError); ok {
+	h := plumbing.NewHash(hash)
+	_, err := repo.gogit.Storer.EncodedObject(plumbing.AnyObject, h)
+	if err == plumbing.ErrObjectNotFound {
 		return false, nil
 	}
-	return false, err
+	return err == nil, err
 }
 
 // GetPath returns the path to the repo.
@@ -152,21 +235,68 @@ func (repo *GitRepo) GetPath() string {
 	return repo.Path
 }
 
-// GetDataDir returns the path to the repo data area, e.g. `.git` directory for
-// git.
+// GetDataDir returns the path to the repo data area, e.g. `.git` directory for git.
 func (repo *GitRepo) GetDataDir() (string, error) {
-	return repo.runGitCommand("rev-parse", "--git-dir")
+	if repo.gogit == nil {
+		return "", errNotInitialized
+	}
+	// NewGitRepo uses PlainOpen which always creates filesystem storage.
+	return repo.gogit.Storer.(*filesystem.Storage).Filesystem().Root(), nil
 }
 
 // GetRepoStateHash returns a hash which embodies the entire current state of a repository.
 func (repo *GitRepo) GetRepoStateHash() (string, error) {
-	stateSummary, err := repo.runGitCommand("show-ref")
-	return fmt.Sprintf("%x", sha1.Sum([]byte(stateSummary))), err
+	if repo.gogit == nil {
+		return "", errNotInitialized
+	}
+	refs, err := gogitReferences(repo)
+	if err != nil {
+		return "", err
+	}
+	type refLine struct {
+		name string
+		line string
+	}
+	var entries []refLine
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name().String()
+		// Match git show-ref behavior: only include refs under refs/
+		if !strings.HasPrefix(name, "refs/") {
+			return nil
+		}
+		entries = append(entries, refLine{
+			name: name,
+			line: fmt.Sprintf("%s %s", ref.Hash().String(), name),
+		})
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].name < entries[j].name
+	})
+	var lines []string
+	for _, e := range entries {
+		lines = append(lines, e.line)
+	}
+	stateSummary := strings.Join(lines, "\n")
+	return fmt.Sprintf("%x", sha1.Sum([]byte(stateSummary))), nil
 }
 
 // GetUserEmail returns the email address that the user has used to configure git.
 func (repo *GitRepo) GetUserEmail() (string, error) {
-	return repo.runGitCommand("config", "user.email")
+	if repo.gogit == nil {
+		return "", errNotInitialized
+	}
+	cfg, err := gogitConfig(repo)
+	if err != nil {
+		return "", err
+	}
+	if email := cfg.User.Email; email != "" {
+		return email, nil
+	}
+	return "", fmt.Errorf("user email not configured")
 }
 
 // GetCoreEditor returns the name of the editor that the user has used to configure git.
@@ -176,49 +306,81 @@ func (repo *GitRepo) GetCoreEditor() (string, error) {
 
 // GetSubmitStrategy returns the way in which a review is submitted
 func (repo *GitRepo) GetSubmitStrategy() (string, error) {
-	submitStrategy, _ := repo.runGitCommand("config", "appraise.submit")
-	return submitStrategy, nil
+	if repo.gogit == nil {
+		return "", nil
+	}
+	cfg, err := gogitConfig(repo)
+	if err != nil {
+		return "", nil
+	}
+	raw := cfg.Raw
+	sec := raw.Section("appraise")
+	val := sec.Option("submit")
+	return val, nil
 }
 
 // HasUncommittedChanges returns true if there are local, uncommitted changes.
 func (repo *GitRepo) HasUncommittedChanges() (bool, error) {
-	out, err := repo.runGitCommand("status", "--porcelain")
+	if repo.gogit == nil {
+		return false, errNotInitialized
+	}
+	status, err := gogitStatus(repo)
 	if err != nil {
 		return false, err
 	}
-	if len(out) > 0 {
-		return true, nil
-	}
-	return false, nil
+	return !status.IsClean(), nil
 }
 
 // VerifyCommit verifies that the supplied hash points to a known commit.
 func (repo *GitRepo) VerifyCommit(hash string) error {
-	out, err := repo.runGitCommand("cat-file", "-t", hash)
-	if err != nil {
-		return err
+	if repo.gogit == nil {
+		return errNotInitialized
 	}
-	objectType := strings.TrimSpace(string(out))
-	if objectType != "commit" {
-		return fmt.Errorf("Hash %q points to a non-commit object of type %q", hash, objectType)
+	h := plumbing.NewHash(hash)
+	obj, err := repo.gogit.Storer.EncodedObject(plumbing.AnyObject, h)
+	if err != nil {
+		return fmt.Errorf("Hash %q not found: %v", hash, err)
+	}
+	if obj.Type() != plumbing.CommitObject {
+		return fmt.Errorf("Hash %q points to a non-commit object of type %q", hash, obj.Type())
 	}
 	return nil
 }
 
 // VerifyGitRef verifies that the supplied ref points to a known commit.
 func (repo *GitRepo) VerifyGitRef(ref string) error {
-	_, err := repo.runGitCommand("show-ref", "--verify", ref)
-	return err
+	if repo.gogit == nil {
+		return errNotInitialized
+	}
+	_, err := repo.gogit.Reference(plumbing.ReferenceName(ref), false)
+	if err != nil {
+		return fmt.Errorf("reference %q not found: %v", ref, err)
+	}
+	return nil
 }
 
 // GetHeadRef returns the ref that is the current HEAD.
 func (repo *GitRepo) GetHeadRef() (string, error) {
-	return repo.runGitCommand("symbolic-ref", "HEAD")
+	if repo.gogit == nil {
+		return "", errNotInitialized
+	}
+	ref, err := gogitHeadRef(repo)
+	if err != nil {
+		return "", err
+	}
+	if ref.Type() != plumbing.SymbolicReference {
+		return "", fmt.Errorf("HEAD is not a symbolic reference")
+	}
+	return ref.Target().String(), nil
 }
 
 // GetCommitHash returns the hash of the commit pointed to by the given ref.
 func (repo *GitRepo) GetCommitHash(ref string) (string, error) {
-	return repo.runGitCommand("show", "-s", "--format=%H", ref, "--")
+	h, err := repo.resolveRevision(ref)
+	if err != nil {
+		return "", err
+	}
+	return h.String(), nil
 }
 
 // ResolveRefCommit returns the commit pointed to by the given ref, which may be a remote ref.
@@ -234,87 +396,125 @@ func (repo *GitRepo) ResolveRefCommit(ref string) (string, error) {
 	if err := repo.VerifyGitRef(ref); err == nil {
 		return repo.GetCommitHash(ref)
 	}
-	if strings.HasPrefix(ref, "refs/heads/") {
+	if after, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
 		// The ref is a branch. Check if it exists in exactly one remote
-		pattern := strings.Replace(ref, "refs/heads", "**", 1)
-		matchingOutput, err := repo.runGitCommand("for-each-ref", "--format=%(refname)", pattern)
+		suffix := after
+		var matchingRefs []string
+		refs, err := gogitReferences(repo)
 		if err != nil {
 			return "", err
 		}
-		matchingRefs := strings.Split(matchingOutput, "\n")
-		if len(matchingRefs) == 1 && matchingRefs[0] != "" {
-			// There is exactly one match
+		err = refs.ForEach(func(r *plumbing.Reference) error {
+			name := r.Name().String()
+			if strings.HasPrefix(name, "refs/remotes/") && strings.HasSuffix(name, "/"+suffix) {
+				matchingRefs = append(matchingRefs, name)
+			}
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+		if len(matchingRefs) == 1 {
 			return repo.GetCommitHash(matchingRefs[0])
 		}
-		return "", fmt.Errorf("Unable to find a git ref matching the pattern %q", pattern)
+		return "", fmt.Errorf("Unable to find a git ref matching the pattern %q", "refs/remotes/*/"+suffix)
 	}
 	return "", fmt.Errorf("Unknown git ref %q", ref)
 }
 
 // GetCommitMessage returns the message stored in the commit pointed to by the given ref.
 func (repo *GitRepo) GetCommitMessage(ref string) (string, error) {
-	return repo.runGitCommand("show", "-s", "--format=%B", ref, "--")
+	c, err := repo.resolveToCommit(ref)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(c.Message), nil
 }
 
 // GetCommitTime returns the commit time of the commit pointed to by the given ref.
 func (repo *GitRepo) GetCommitTime(ref string) (string, error) {
-	return repo.runGitCommand("show", "-s", "--format=%ct", ref, "--")
+	c, err := repo.resolveToCommit(ref)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(c.Committer.When.Unix(), 10), nil
 }
 
 // GetLastParent returns the last parent of the given commit (as ordered by git).
+// For merge commits, this is the second parent (the merged-in branch head),
+// which is the intended behavior for the review diff base calculation.
 func (repo *GitRepo) GetLastParent(ref string) (string, error) {
-	return repo.runGitCommand("rev-list", "--skip", "1", "-n", "1", ref)
+	c, err := repo.resolveToCommit(ref)
+	if err != nil {
+		return "", err
+	}
+	if len(c.ParentHashes) == 0 {
+		return "", nil
+	}
+	return c.ParentHashes[len(c.ParentHashes)-1].String(), nil
 }
 
 // GetCommitDetails returns the details of a commit's metadata.
 func (repo GitRepo) GetCommitDetails(ref string) (*CommitDetails, error) {
-	var err error
-	show := func(formatString string) (result string) {
-		if err != nil {
-			return ""
-		}
-		result, err = repo.runGitCommand("show", "-s", fmt.Sprintf("--format=tformat:%s", formatString), ref, "--")
-		return result
-	}
-
-	jsonFormatString := "{\"tree\":\"%T\", \"time\": \"%at\"}"
-	detailsJSON := show(jsonFormatString)
+	c, err := repo.resolveToCommit(ref)
 	if err != nil {
 		return nil, err
 	}
-	var details CommitDetails
-	err = json.Unmarshal([]byte(detailsJSON), &details)
-	if err != nil {
-		return nil, err
+	var parents []string
+	for _, p := range c.ParentHashes {
+		parents = append(parents, p.String())
 	}
-	details.Author = show("%an")
-	details.AuthorEmail = show("%ae")
-	details.Committer = show("%cn")
-	details.CommitterEmail = show("%ce")
-	details.Summary = show("%s")
-	parentsString := show("%P")
-	details.Parents = strings.Split(parentsString, " ")
-	if err != nil {
-		return nil, err
+	if parents == nil {
+		parents = []string{""}
 	}
-	return &details, nil
+	return &CommitDetails{
+		Author:         c.Author.Name,
+		AuthorEmail:    c.Author.Email,
+		Committer:      c.Committer.Name,
+		CommitterEmail: c.Committer.Email,
+		Tree:           c.TreeHash.String(),
+		Time:           strconv.FormatInt(c.Author.When.Unix(), 10),
+		Parents:        parents,
+		Summary:        strings.SplitN(c.Message, "\n", 2)[0],
+	}, nil
 }
 
 // MergeBase determines if the first commit that is an ancestor of the two arguments.
 func (repo *GitRepo) MergeBase(a, b string) (string, error) {
-	return repo.runGitCommand("merge-base", a, b)
+	cA, err := repo.resolveToCommit(a)
+	if err != nil {
+		return "", err
+	}
+	cB, err := repo.resolveToCommit(b)
+	if err != nil {
+		return "", err
+	}
+	// go-git's MergeBase returns empty bases (not an error) for disconnected histories.
+	bases, _ := cA.MergeBase(cB)
+	if len(bases) == 0 {
+		return "", fmt.Errorf("no merge base found")
+	}
+	return bases[0].Hash.String(), nil
 }
 
 // IsAncestor determines if the first argument points to a commit that is an ancestor of the second.
 func (repo *GitRepo) IsAncestor(ancestor, descendant string) (bool, error) {
-	_, _, err := repo.runGitCommandRaw("merge-base", "--is-ancestor", ancestor, descendant)
-	if err == nil {
+	cAnc, err := repo.resolveToCommit(ancestor)
+	if err != nil {
+		return false, fmt.Errorf("Error while trying to determine commit ancestry: %v", err)
+	}
+	cDesc, err := repo.resolveToCommit(descendant)
+	if err != nil {
+		return false, fmt.Errorf("Error while trying to determine commit ancestry: %v", err)
+	}
+	if cAnc.Hash == cDesc.Hash {
 		return true, nil
 	}
-	if _, ok := err.(*exec.ExitError); ok {
-		return false, nil
+	isAnc, err := cAnc.IsAncestor(cDesc)
+	if err != nil {
+		return false, fmt.Errorf("Error while trying to determine commit ancestry: %v", err)
 	}
-	return false, fmt.Errorf("Error while trying to determine commit ancestry: %v", err)
+	return isAnc, nil
 }
 
 // Diff computes the diff between two given commits.
@@ -414,18 +614,41 @@ func parsedDiff(diff string) ([]FileDiff, error) {
 
 // Show returns the contents of the given file at the given commit.
 func (repo *GitRepo) Show(commit, path string) (string, error) {
-	return repo.runGitCommand("show", fmt.Sprintf("%s:%s", commit, path), "--")
+	c, err := repo.resolveToCommit(commit)
+	if err != nil {
+		return "", err
+	}
+	f, err := c.File(path)
+	if err != nil {
+		return "", err
+	}
+	contents, err := f.Contents()
+	return strings.TrimSpace(contents), err
 }
 
 // SwitchToRef changes the currently-checked-out ref.
 func (repo *GitRepo) SwitchToRef(ref string) error {
-	// If the ref starts with "refs/heads/", then we have to trim that prefix,
-	// or else we will wind up in a detached HEAD state.
-	if strings.HasPrefix(ref, branchRefPrefix) {
-		ref = ref[len(branchRefPrefix):]
+	if repo.gogit == nil {
+		return errNotInitialized
 	}
-	_, err := repo.runGitCommand("checkout", ref)
-	return err
+	wt, err := repo.gogit.Worktree()
+	if err != nil {
+		return err
+	}
+	// If the ref is a branch, use the branch name to avoid a detached HEAD state.
+	if strings.HasPrefix(ref, branchRefPrefix) {
+		branchName := plumbing.ReferenceName(ref)
+		return wt.Checkout(&gogit.CheckoutOptions{
+			Branch: branchName,
+		})
+	}
+	h, err := repo.resolveRevision(ref)
+	if err != nil {
+		return err
+	}
+	return wt.Checkout(&gogit.CheckoutOptions{
+		Hash: h,
+	})
 }
 
 // mergeArchives merges two archive refs.
@@ -435,7 +658,6 @@ func (repo *GitRepo) mergeArchives(archive, remoteArchive string) error {
 		return err
 	}
 	if !hasRemote {
-		// The remote archive does not exist, so we have nothing to do
 		return nil
 	}
 	remoteHash, err := repo.GetCommitHash(remoteArchive)
@@ -443,14 +665,10 @@ func (repo *GitRepo) mergeArchives(archive, remoteArchive string) error {
 		return err
 	}
 
-	hasLocal, err := repo.HasRef(archive)
-	if err != nil {
-		return err
-	}
+	hasLocal, _ := repo.HasRef(archive)
 	if !hasLocal {
 		// The local archive does not exist, so we merely need to set it
-		_, err := repo.runGitCommand("update-ref", archive, remoteHash)
-		return err
+		return repo.SetRef(archive, remoteHash, "")
 	}
 	archiveHash, err := repo.GetCommitHash(archive)
 	if err != nil {
@@ -463,22 +681,23 @@ func (repo *GitRepo) mergeArchives(archive, remoteArchive string) error {
 	}
 	if isAncestor {
 		// The archive can simply be fast-forwarded
-		_, err := repo.runGitCommand("update-ref", archive, remoteHash, archiveHash)
-		return err
+		return repo.SetRef(archive, remoteHash, archiveHash)
 	}
 
-	// Create a merge commit of the two archives
-	refDetails, err := repo.GetCommitDetails(remoteArchive)
+	// Create a merge commit of the two archives.
+	// resolveToCommit will succeed because remoteArchive was already
+	// verified as a valid commit ref above.
+	cRemote, _ := repo.resolveToCommit(remoteArchive)
+	newDetails := &CommitDetails{
+		Summary: "Merge local and remote archives",
+		Tree:    cRemote.TreeHash.String(),
+		Parents: []string{remoteHash, archiveHash},
+	}
+	newArchiveHash, err := repo.CreateCommit(newDetails)
 	if err != nil {
 		return err
 	}
-	newArchiveHash, err := repo.runGitCommand("commit-tree", "-p", remoteHash, "-p", archiveHash, "-m", "Merge local and remote archives", refDetails.Tree)
-	if err != nil {
-		return err
-	}
-	newArchiveHash = strings.TrimSpace(newArchiveHash)
-	_, err = repo.runGitCommand("update-ref", archive, newArchiveHash, archiveHash)
-	return err
+	return repo.SetRef(archive, newArchiveHash, archiveHash)
 }
 
 // ArchiveRef adds the current commit pointed to by the 'ref' argument
@@ -491,16 +710,13 @@ func (repo *GitRepo) mergeArchives(archive, remoteArchive string) error {
 // If the ref pointed to by the 'archive' argument does not exist
 // yet, then it will be created.
 func (repo *GitRepo) ArchiveRef(ref, archive string) error {
-	refHash, err := repo.GetCommitHash(ref)
+	cRef, err := repo.resolveToCommit(ref)
 	if err != nil {
 		return err
 	}
-	refDetails, err := repo.GetCommitDetails(ref)
-	if err != nil {
-		return err
-	}
+	refHash := cRef.Hash.String()
 
-	commitTreeArgs := []string{"commit-tree"}
+	var parents []string
 	archiveHash, err := repo.GetCommitHash(archive)
 	if err != nil {
 		archiveHash = ""
@@ -511,20 +727,24 @@ func (repo *GitRepo) ArchiveRef(ref, archive string) error {
 			// The ref has already been archived, so we have nothing to do
 			return nil
 		}
-		commitTreeArgs = append(commitTreeArgs, "-p", archiveHash)
+		parents = append(parents, archiveHash)
 	}
-	commitTreeArgs = append(commitTreeArgs, "-p", refHash, "-m", fmt.Sprintf("Archive %s", refHash), refDetails.Tree)
-	newArchiveHash, err := repo.runGitCommand(commitTreeArgs...)
+	parents = append(parents, refHash)
+
+	newDetails := &CommitDetails{
+		Summary: fmt.Sprintf("Archive %s", refHash),
+		Tree:    cRef.TreeHash.String(),
+		Parents: parents,
+	}
+	newArchiveHash, err := repo.CreateCommit(newDetails)
 	if err != nil {
 		return err
 	}
-	newArchiveHash = strings.TrimSpace(newArchiveHash)
-	updateRefArgs := []string{"update-ref", archive, newArchiveHash}
+	updatePrevious := ""
 	if archiveHash != "" {
-		updateRefArgs = append(updateRefArgs, archiveHash)
+		updatePrevious = archiveHash
 	}
-	_, err = repo.runGitCommand(updateRefArgs...)
-	return err
+	return repo.SetRef(archive, newArchiveHash, updatePrevious)
 }
 
 // MergeRef merges the given ref into the current one.
@@ -559,17 +779,21 @@ func (repo *GitRepo) RebaseRef(ref string) error {
 //
 // If the specified ref does not exist, then this method returns an empty result.
 func (repo *GitRepo) ListCommits(ref string) []string {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if err := repo.runGitCommandWithIO(nil, &stdout, &stderr, "rev-list", "--reverse", ref); err != nil {
+	if repo.gogit == nil {
 		return nil
 	}
-
-	byteLines := bytes.Split(stdout.Bytes(), []byte("\n"))
-	var commits []string
-	for _, byteLine := range byteLines {
-		commits = append(commits, string(byteLine))
+	h, err := repo.resolveRevision(ref)
+	if err != nil {
+		return nil
 	}
+	// Log returns the iterator without error; errors surface during iteration.
+	iter, _ := repo.gogit.Log(&gogit.LogOptions{From: h, Order: gogit.LogOrderCommitterTime})
+	var commits []string
+	_ = iter.ForEach(func(c *object.Commit) error {
+		commits = append(commits, c.Hash.String())
+		return nil
+	})
+	slices.Reverse(commits)
 	return commits
 }
 
@@ -600,51 +824,70 @@ func (repo *GitRepo) ListCommitsBetween(from, to string) ([]string, error) {
 
 // StoreBlob writes the given file to the repository and returns its hash.
 func (repo *GitRepo) StoreBlob(contents string) (string, error) {
-	stdin := strings.NewReader(contents)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	args := []string{"hash-object", "-w", "-t", "blob", "--stdin"}
-	err := repo.runGitCommandWithIO(stdin, &stdout, &stderr, args...)
-	if err != nil {
-		message := strings.TrimSpace(stderr.String())
-		return "", fmt.Errorf("failure storing a git blob, %v: %q", err, message)
+	if repo.gogit == nil {
+		return "", fmt.Errorf("failure storing a git blob: repository not initialized")
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	obj := repo.gogit.Storer.NewEncodedObject()
+	obj.SetType(plumbing.BlobObject)
+	// Writer, WriteString, and Close operate on an in-memory buffer
+	// and cannot fail.
+	w, _ := obj.Writer()
+	io.WriteString(w, contents)
+	w.Close()
+	h, err := storeObject(repo, obj)
+	if err != nil {
+		return "", fmt.Errorf("failure storing a git blob: %v", err)
+	}
+	return h.String(), nil
 }
 
 // StoreTree writes the given file tree to the repository and returns its hash.
 func (repo *GitRepo) StoreTree(contents map[string]TreeChild) (string, error) {
-	var lines []string
+	if repo.gogit == nil {
+		return "", fmt.Errorf("failure storing a git tree: repository not initialized")
+	}
+	var entries []object.TreeEntry
 	for path, obj := range contents {
 		objHash, err := obj.Store(repo)
 		if err != nil {
 			return "", err
 		}
-		mode := "040000"
+		mode := filemode.Dir
 		if obj.Type() == "blob" {
-			mode = "100644"
+			mode = filemode.Regular
 		}
-		line := fmt.Sprintf("%s %s %s\t%s", mode, obj.Type(), objHash, path)
-		lines = append(lines, line)
+		entries = append(entries, object.TreeEntry{
+			Name: path,
+			Mode: mode,
+			Hash: plumbing.NewHash(objHash),
+		})
 	}
-	stdin := strings.NewReader(strings.Join(lines, "\n"))
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	args := []string{"mktree"}
-	err := repo.runGitCommandWithIO(stdin, &stdout, &stderr, args...)
+	sort.Sort(object.TreeEntrySorter(entries))
+	t := &object.Tree{Entries: entries}
+	obj := repo.gogit.Storer.NewEncodedObject()
+	// Encode writes to an in-memory buffer and cannot fail.
+	t.Encode(obj)
+	h, err := storeObject(repo, obj)
 	if err != nil {
-		message := strings.TrimSpace(stderr.String())
-		return "", fmt.Errorf("failure storing a git tree, %v: %q", err, message)
+		return "", fmt.Errorf("failure storing a git tree: %v", err)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return h.String(), nil
 }
 
 func (repo *GitRepo) readBlob(objHash string) (*Blob, error) {
-	out, err := repo.runGitCommand("cat-file", "-p", objHash)
+	if repo.gogit == nil {
+		return nil, fmt.Errorf("failure reading the file contents of %q: repository not initialized", objHash)
+	}
+	h := plumbing.NewHash(objHash)
+	obj, err := repo.gogit.BlobObject(h)
 	if err != nil {
 		return nil, fmt.Errorf("failure reading the file contents of %q: %v", objHash, err)
 	}
-	return &Blob{contents: out, savedHashes: map[Repo]string{repo: objHash}}, nil
+	// Reader and ReadAll operate on the already-loaded blob and cannot fail.
+	r, _ := obj.Reader()
+	defer r.Close()
+	data, _ := io.ReadAll(r)
+	return &Blob{contents: string(data), savedHashes: map[Repo]string{repo: objHash}}, nil
 }
 
 func (repo *GitRepo) ReadTree(ref string) (*Tree, error) {
@@ -652,71 +895,124 @@ func (repo *GitRepo) ReadTree(ref string) (*Tree, error) {
 }
 
 func (repo *GitRepo) readTreeWithHash(ref, hash string) (*Tree, error) {
-	out, err := repo.runGitCommand("ls-tree", "--full-tree", ref)
+	if repo.gogit == nil {
+		return nil, fmt.Errorf("failure listing the file contents of %q: repository not initialized", ref)
+	}
+	h := plumbing.NewHash(ref)
+	t, err := repo.gogit.TreeObject(h)
 	if err != nil {
 		return nil, fmt.Errorf("failure listing the file contents of %q: %v", ref, err)
 	}
 	contents := make(map[string]TreeChild)
-	if len(out) == 0 {
-		// This is possible if the tree is empty
-		return NewTree(contents), nil
-	}
-	for line := range strings.SplitSeq(out, "\n") {
-		lineParts := strings.Split(line, "\t")
-		if len(lineParts) != 2 {
-			return nil, fmt.Errorf("malformed ls-tree output line: %q", line)
-		}
-		path := lineParts[1]
-		lineParts = strings.Split(lineParts[0], " ")
-		if len(lineParts) != 3 {
-			return nil, fmt.Errorf("malformed ls-tree output line: %q", line)
-		}
-		objType := lineParts[1]
-		objHash := lineParts[2]
+	for _, entry := range t.Entries {
 		var child TreeChild
-		if objType == "tree" {
-			child, err = repo.readTreeWithHash(objHash, objHash)
-		} else if objType == "blob" {
-			child, err = repo.readBlob(objHash)
+		entryHash := entry.Hash.String()
+		if entry.Mode == filemode.Dir {
+			child, err = repo.readTreeWithHash(entryHash, entryHash)
+		} else if entry.Mode == filemode.Submodule {
+			return nil, fmt.Errorf("unrecognized tree object type for entry %q: submodule", entry.Name)
 		} else {
-			return nil, fmt.Errorf("unrecognized tree object type: %q", objType)
+			child, err = repo.readBlob(entryHash)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to read a tree child object: %v", err)
 		}
-		contents[path] = child
+		contents[entry.Name] = child
 	}
-	t := NewTree(contents)
-	t.savedHashes[repo] = hash
-	return t, nil
+	result := NewTree(contents)
+	result.savedHashes[repo] = hash
+	return result, nil
 }
 
 // CreateCommit creates a commit object and returns its hash.
 func (repo *GitRepo) CreateCommit(details *CommitDetails) (string, error) {
-	args := []string{"commit-tree", details.Tree, "-m", details.Summary}
-	for _, parent := range details.Parents {
-		args = append(args, "-p", parent)
+	if repo.gogit == nil {
+		return "", fmt.Errorf("failure creating commit: repository not initialized")
 	}
-	var env []string
-	if details.Author != "" {
-		env = append(env, fmt.Sprintf("GIT_AUTHOR_NAME=%s", details.Author))
+	now := time.Now()
+	author := object.Signature{
+		Name:  details.Author,
+		Email: details.AuthorEmail,
+		When:  now,
 	}
-	if details.AuthorEmail != "" {
-		env = append(env, fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", details.AuthorEmail))
+	committer := object.Signature{
+		Name:  details.Committer,
+		Email: details.CommitterEmail,
+		When:  now,
 	}
+
 	if details.AuthorTime != "" {
-		env = append(env, fmt.Sprintf("GIT_AUTHOR_DATE=%s", details.AuthorTime))
-	}
-	if details.Committer != "" {
-		env = append(env, fmt.Sprintf("GIT_COMMITTER_NAME=%s", details.Committer))
-	}
-	if details.CommitterEmail != "" {
-		env = append(env, fmt.Sprintf("GIT_COMMITTER_EMAIL=%s", details.CommitterEmail))
+		if t, err := parseGitTime(details.AuthorTime); err == nil {
+			author.When = t
+		}
 	}
 	if details.Time != "" {
-		env = append(env, fmt.Sprintf("GIT_COMMITTER_DATE=%s", details.Time))
+		if t, err := parseGitTime(details.Time); err == nil {
+			committer.When = t
+		}
 	}
-	return repo.runGitCommandWithEnv(env, args...)
+
+	// Fill in missing author/committer from config
+	if author.Name == "" || author.Email == "" || committer.Name == "" || committer.Email == "" {
+		cfg, err := repo.gogit.ConfigScoped(config.SystemScope)
+		if err == nil {
+			if author.Name == "" {
+				author.Name = cfg.User.Name
+			}
+			if author.Email == "" {
+				author.Email = cfg.User.Email
+			}
+			if committer.Name == "" {
+				committer.Name = cfg.User.Name
+			}
+			if committer.Email == "" {
+				committer.Email = cfg.User.Email
+			}
+		}
+	}
+
+	var parentHashes []plumbing.Hash
+	for _, p := range details.Parents {
+		if p == "" {
+			continue
+		}
+		parentHashes = append(parentHashes, plumbing.NewHash(p))
+	}
+
+	c := &object.Commit{
+		Author:       author,
+		Committer:    committer,
+		Message:      details.Summary,
+		TreeHash:     plumbing.NewHash(details.Tree),
+		ParentHashes: parentHashes,
+	}
+	obj := repo.gogit.Storer.NewEncodedObject()
+	// Encode writes to an in-memory buffer and cannot fail.
+	c.Encode(obj)
+	h, err := storeObject(repo, obj)
+	if err != nil {
+		return "", fmt.Errorf("failure creating commit: %v", err)
+	}
+	return h.String(), nil
+}
+
+// parseGitTime parses a git time string (unix timestamp with optional timezone).
+func parseGitTime(s string) (time.Time, error) {
+	parts := strings.Fields(s)
+	if len(parts) == 0 {
+		return time.Time{}, fmt.Errorf("empty time string")
+	}
+	ts, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	loc := time.UTC
+	if len(parts) > 1 {
+		if tz, err := time.Parse("-0700", parts[1]); err == nil {
+			loc = tz.Location()
+		}
+	}
+	return time.Unix(ts, 0).In(loc), nil
 }
 
 // CreateCommitWithTree creates a commit object with the given tree and returns its hash.
@@ -732,12 +1028,15 @@ func (repo *GitRepo) CreateCommitWithTree(details *CommitDetails, t *Tree) (stri
 // SetRef sets the commit pointed to by the specified ref to `newCommitHash`,
 // iff the ref currently points `previousCommitHash`.
 func (repo *GitRepo) SetRef(ref, newCommitHash, previousCommitHash string) error {
-	args := []string{"update-ref", ref, newCommitHash}
-	if previousCommitHash != "" {
-		args = append(args, previousCommitHash)
+	if repo.gogit == nil {
+		return errNotInitialized
 	}
-	_, err := repo.runGitCommand(args...)
-	return err
+	newRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), plumbing.NewHash(newCommitHash))
+	if previousCommitHash != "" {
+		oldRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), plumbing.NewHash(previousCommitHash))
+		return repo.gogit.Storer.CheckAndSetReference(newRef, oldRef)
+	}
+	return repo.gogit.Storer.SetReference(newRef)
 }
 
 // GetNotes uses the "git" command-line tool to read the notes from the given ref for a given revision.
@@ -1024,17 +1323,16 @@ func (repo *GitRepo) ListNotedRevisions(notesRef string) []string {
 
 // Remotes returns a list of the remotes.
 func (repo *GitRepo) Remotes() ([]string, error) {
-	remotes, err := repo.runGitCommand("remote")
+	if repo.gogit == nil {
+		return nil, errNotInitialized
+	}
+	remotes, err := gogitRemotes(repo)
 	if err != nil {
 		return nil, err
 	}
-	remoteNames := strings.Split(remotes, "\n")
 	var result []string
-	for _, name := range remoteNames {
-		name = strings.TrimSpace(name)
-		if name != "" {
-			result = append(result, name)
-		}
+	for _, r := range remotes {
+		result = append(result, r.Config().Name)
 	}
 	sort.Strings(result)
 	return result, nil
@@ -1075,20 +1373,24 @@ func (repo *GitRepo) getRefHashes(refPattern string) (map[string]string, error) 
 	if !strings.HasSuffix(refPattern, "/*") {
 		return nil, fmt.Errorf("unsupported ref pattern %q", refPattern)
 	}
+	if repo.gogit == nil {
+		return nil, errNotInitialized
+	}
 	refPrefix := strings.TrimSuffix(refPattern, "*")
-	showRef, err := repo.runGitCommand("show-ref")
+	refs, err := gogitReferences(repo)
 	if err != nil {
 		return nil, err
 	}
 	refsMap := make(map[string]string)
-	for line := range strings.SplitSeq(showRef, "\n") {
-		lineParts := strings.Split(line, " ")
-		if len(lineParts) != 2 {
-			return nil, fmt.Errorf("unexpected line in output of `git show-ref`: %q", line)
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name().String()
+		if strings.HasPrefix(name, refPrefix) {
+			refsMap[name] = ref.Hash().String()
 		}
-		if strings.HasPrefix(lineParts[1], refPrefix) {
-			refsMap[lineParts[1]] = lineParts[0]
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return refsMap, nil
 }
@@ -1190,7 +1492,6 @@ func (repo *GitRepo) FetchAndReturnNewReviewHashes(remote, notesRefPattern strin
 	remoteDevtoolsRefPattern := getRemoteDevtoolsRef(remote, localDevtoolsRefPattern)
 	devtoolsFetchRefSpec := fmt.Sprintf("+%s:%s", localDevtoolsRefPattern, remoteDevtoolsRefPattern)
 
-	// Prior to fetching, record the current state of the remote notes refs
 	priorRefHashes, err := repo.getRefHashes(remoteNotesRefPattern)
 	if err != nil {
 		return nil, fmt.Errorf("failure reading the existing ref hashes for the remote %q: %v", remote, err)
@@ -1200,18 +1501,15 @@ func (repo *GitRepo) FetchAndReturnNewReviewHashes(remote, notesRefPattern strin
 		return nil, fmt.Errorf("failure fetching from the remote %q: %v", remote, err)
 	}
 
-	// After fetching, record the updated state of the remote notes refs
 	updatedRefHashes, err := repo.getRefHashes(remoteNotesRefPattern)
 	if err != nil {
 		return nil, fmt.Errorf("failure reading the updated ref hashes for the remote %q: %v", remote, err)
 	}
 
-	// Now that we have our two lists, we need to merge them.
 	updatedReviewSet := make(map[string]struct{})
 	for ref, hash := range updatedRefHashes {
 		priorHash, ok := priorRefHashes[ref]
 		if priorHash == hash {
-			// Nothing has changed for this ref
 			continue
 		}
 		var notes string
@@ -1233,7 +1531,7 @@ func (repo *GitRepo) FetchAndReturnNewReviewHashes(remote, notesRefPattern strin
 	}
 
 	updatedReviews := make([]string, 0, len(updatedReviewSet))
-	for key, _ := range updatedReviewSet {
+	for key := range updatedReviewSet {
 		updatedReviews = append(updatedReviews, key)
 	}
 	return updatedReviews, nil
