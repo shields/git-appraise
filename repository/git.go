@@ -1478,19 +1478,31 @@ func (repo *GitRepo) Remotes() ([]string, error) {
 
 // Fetch fetches from the given remote using the supplied refspecs.
 func (repo *GitRepo) Fetch(remote string, refspecs ...string) error {
-	args := []string{"fetch", remote}
-	args = append(args, refspecs...)
-	return repo.runGitCommandInline(args...)
+	if repo.gogit == nil {
+		return errNotInitialized
+	}
+	specs := make([]config.RefSpec, len(refspecs))
+	for i, rs := range refspecs {
+		specs[i] = config.RefSpec(rs)
+	}
+	err := repo.gogit.Fetch(&gogit.FetchOptions{
+		RemoteName: remote,
+		RefSpecs:   specs,
+		Tags:       gogit.NoTags,
+		Progress:   os.Stderr,
+	})
+	if err == gogit.NoErrAlreadyUpToDate {
+		return nil
+	}
+	return err
 }
 
 // PushNotes pushes git notes to a remote repo.
 func (repo *GitRepo) PushNotes(remote, notesRefPattern string) error {
 	refspec := fmt.Sprintf("%s:%s", notesRefPattern, notesRefPattern)
-
 	// The push is liable to fail if the user forgot to do a pull first, so
 	// we treat errors as user errors rather than fatal errors.
-	err := repo.runGitCommandInline("push", remote, refspec)
-	if err != nil {
+	if err := repo.Push(remote, refspec); err != nil {
 		return fmt.Errorf("Failed to push to the remote '%s': %v", remote, err)
 	}
 	return nil
@@ -1500,8 +1512,7 @@ func (repo *GitRepo) PushNotes(remote, notesRefPattern string) error {
 func (repo *GitRepo) PushNotesAndArchive(remote, notesRefPattern, archiveRefPattern string) error {
 	notesRefspec := fmt.Sprintf("%s:%s", notesRefPattern, notesRefPattern)
 	archiveRefspec := fmt.Sprintf("%s:%s", archiveRefPattern, archiveRefPattern)
-	err := repo.runGitCommandInline("push", remote, notesRefspec, archiveRefspec)
-	if err != nil {
+	if err := repo.Push(remote, notesRefspec, archiveRefspec); err != nil {
 		return fmt.Errorf("Failed to push the local archive to the remote '%s': %v", remote, err)
 	}
 	return nil
@@ -1911,8 +1922,21 @@ func (repo *GitRepo) PullNotesAndArchive(remote, notesRefPattern, archiveRefPatt
 
 // Push pushes the given refs to a remote repo.
 func (repo *GitRepo) Push(remote string, refSpecs ...string) error {
-	pushArgs := append([]string{"push", remote}, refSpecs...)
-	err := repo.runGitCommandInline(pushArgs...)
+	if repo.gogit == nil {
+		return errNotInitialized
+	}
+	specs := make([]config.RefSpec, len(refSpecs))
+	for i, rs := range refSpecs {
+		specs[i] = config.RefSpec(rs)
+	}
+	err := repo.gogit.Push(&gogit.PushOptions{
+		RemoteName: remote,
+		RefSpecs:   specs,
+		Progress:   os.Stderr,
+	})
+	if err == gogit.NoErrAlreadyUpToDate {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("Failed to push the local refs to the remote '%s': %v", remote, err)
 	}
