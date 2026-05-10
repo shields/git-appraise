@@ -1,5 +1,7 @@
 on: [push, pull_request]
 name: Build and Test
+permissions:
+  contents: read
 jobs:
   test:
     strategy:
