@@ -54,8 +54,9 @@ type GitRepo struct {
 }
 
 // execGitCommand is a test seam for injecting command execution failures.
-// Tests must not run in parallel when overriding this variable (Go test
-// packages run sequentially by default; t.Parallel is not used).
+// Tests that override this (or any other seam in this file) must not call
+// t.Parallel — they run serially, before parallel tests, so the seam is
+// restored by t.Cleanup before any parallel test observes it.
 var execGitCommand = func(cmd *exec.Cmd) error {
 	return cmd.Run()
 }

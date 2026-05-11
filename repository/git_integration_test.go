@@ -89,6 +89,7 @@ func addCommit(t *testing.T, repo *GitRepo, filename, content, message string) {
 }
 
 func TestGitRepoNewGitRepo(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	if repo.GetPath() == "" {
 		t.Fatal("expected non-empty path")
@@ -96,6 +97,7 @@ func TestGitRepoNewGitRepo(t *testing.T) {
 }
 
 func TestGitRepoNewGitRepoInvalid(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_, err := NewGitRepo(dir)
 	if err == nil {
@@ -104,6 +106,7 @@ func TestGitRepoNewGitRepoInvalid(t *testing.T) {
 }
 
 func TestGitRepoGetPath(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	if repo.GetPath() == "" {
 		t.Fatal("expected non-empty path")
@@ -111,6 +114,7 @@ func TestGitRepoGetPath(t *testing.T) {
 }
 
 func TestGitRepoGetDataDir(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	dir, err := repo.GetDataDir()
 	if err != nil {
@@ -122,6 +126,7 @@ func TestGitRepoGetDataDir(t *testing.T) {
 }
 
 func TestGitRepoGetRepoStateHash(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, err := repo.GetRepoStateHash()
 	if err != nil {
@@ -133,6 +138,7 @@ func TestGitRepoGetRepoStateHash(t *testing.T) {
 }
 
 func TestGitRepoGetUserEmail(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	email, err := repo.GetUserEmail()
 	if err != nil {
@@ -144,6 +150,7 @@ func TestGitRepoGetUserEmail(t *testing.T) {
 }
 
 func TestGitRepoGetSubmitStrategy(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	strategy, err := repo.GetSubmitStrategy()
 	if err != nil {
@@ -155,6 +162,7 @@ func TestGitRepoGetSubmitStrategy(t *testing.T) {
 }
 
 func TestGitRepoHasUncommittedChanges(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	has, err := repo.HasUncommittedChanges()
 	if err != nil {
@@ -176,6 +184,7 @@ func TestGitRepoHasUncommittedChanges(t *testing.T) {
 }
 
 func TestGitRepoHasRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	has, err := repo.HasRef("refs/heads/main")
 	if err != nil {
@@ -194,6 +203,7 @@ func TestGitRepoHasRef(t *testing.T) {
 }
 
 func TestGitRepoVerifyCommit(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	if err := repo.VerifyCommit(hash); err != nil {
@@ -205,6 +215,7 @@ func TestGitRepoVerifyCommit(t *testing.T) {
 }
 
 func TestGitRepoVerifyGitRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	if err := repo.VerifyGitRef("refs/heads/main"); err != nil {
 		t.Fatal(err)
@@ -215,6 +226,7 @@ func TestGitRepoVerifyGitRef(t *testing.T) {
 }
 
 func TestGitRepoGetHeadRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	head, err := repo.GetHeadRef()
 	if err != nil {
@@ -226,6 +238,7 @@ func TestGitRepoGetHeadRef(t *testing.T) {
 }
 
 func TestGitRepoGetCommitHash(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, err := repo.GetCommitHash("HEAD")
 	if err != nil {
@@ -237,6 +250,7 @@ func TestGitRepoGetCommitHash(t *testing.T) {
 }
 
 func TestGitRepoGetCommitMessage(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	msg, err := repo.GetCommitMessage("HEAD")
 	if err != nil {
@@ -248,6 +262,7 @@ func TestGitRepoGetCommitMessage(t *testing.T) {
 }
 
 func TestGitRepoGetCommitTime(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	time, err := repo.GetCommitTime("HEAD")
 	if err != nil {
@@ -259,6 +274,7 @@ func TestGitRepoGetCommitTime(t *testing.T) {
 }
 
 func TestGitRepoGetLastParent(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	parent, err := repo.GetLastParent("HEAD")
 	if err != nil {
@@ -270,6 +286,7 @@ func TestGitRepoGetLastParent(t *testing.T) {
 }
 
 func TestGitRepoGetCommitDetails(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	details, err := repo.GetCommitDetails("HEAD")
 	if err != nil {
@@ -291,6 +308,7 @@ func TestGitRepoGetCommitDetails(t *testing.T) {
 }
 
 func TestGitRepoGetCommitDetailsWithParent(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	rootHash, err := repo.GetCommitHash("HEAD")
 	if err != nil {
@@ -308,6 +326,7 @@ func TestGitRepoGetCommitDetailsWithParent(t *testing.T) {
 }
 
 func TestGitRepoIsAncestor(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 	addCommit(t, repo, "file.txt", "updated\n", "second commit")
@@ -330,6 +349,7 @@ func TestGitRepoIsAncestor(t *testing.T) {
 }
 
 func TestGitRepoMergeBase(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 	gitRun(t, repo.Path, "checkout", "-b", "feature")
@@ -346,6 +366,7 @@ func TestGitRepoMergeBase(t *testing.T) {
 }
 
 func TestGitRepoDiff(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 	addCommit(t, repo, "file.txt", "changed\n", "second")
@@ -361,6 +382,7 @@ func TestGitRepoDiff(t *testing.T) {
 }
 
 func TestGitRepoDiff1(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	addCommit(t, repo, "file.txt", "changed\n", "second")
 	secondHash, _ := repo.GetCommitHash("HEAD")
@@ -375,6 +397,7 @@ func TestGitRepoDiff1(t *testing.T) {
 }
 
 func TestGitRepoParsedDiff(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 	addCommit(t, repo, "file.txt", "changed\n", "second")
@@ -390,6 +413,7 @@ func TestGitRepoParsedDiff(t *testing.T) {
 }
 
 func TestGitRepoShow(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	content, err := repo.Show("HEAD", "file.txt")
 	if err != nil {
@@ -401,6 +425,7 @@ func TestGitRepoShow(t *testing.T) {
 }
 
 func TestGitRepoListCommits(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	commits := repo.ListCommits("HEAD")
 	if len(commits) == 0 {
@@ -409,6 +434,7 @@ func TestGitRepoListCommits(t *testing.T) {
 }
 
 func TestGitRepoListCommitsBetween(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 	addCommit(t, repo, "file.txt", "changed\n", "second")
@@ -427,6 +453,7 @@ func TestGitRepoListCommitsBetween(t *testing.T) {
 }
 
 func TestGitRepoStoreBlob(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, err := repo.StoreBlob("blob content")
 	if err != nil {
@@ -442,6 +469,7 @@ func TestGitRepoStoreBlob(t *testing.T) {
 }
 
 func TestGitRepoStoreAndReadTree(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	contents := map[string]TreeChild{
 		"hello.txt": NewBlob("hello world"),
@@ -467,6 +495,7 @@ func TestGitRepoStoreAndReadTree(t *testing.T) {
 }
 
 func TestGitRepoCreateCommit(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	parentHash, _ := repo.GetCommitHash("HEAD")
 	treeHash, _ := repo.runGitCommand("rev-parse", "HEAD^{tree}")
@@ -495,6 +524,7 @@ func TestGitRepoCreateCommit(t *testing.T) {
 }
 
 func TestGitRepoCreateCommitWithTree(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	parentHash, _ := repo.GetCommitHash("HEAD")
 	tree := NewTree(map[string]TreeChild{
@@ -520,6 +550,7 @@ func TestGitRepoCreateCommitWithTree(t *testing.T) {
 }
 
 func TestGitRepoSetRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -533,6 +564,7 @@ func TestGitRepoSetRef(t *testing.T) {
 }
 
 func TestGitRepoNotes(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/test"
@@ -555,6 +587,7 @@ func TestGitRepoNotes(t *testing.T) {
 }
 
 func TestGitRepoListNotedRevisions(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/test"
@@ -572,6 +605,7 @@ func TestGitRepoListNotedRevisions(t *testing.T) {
 }
 
 func TestGitRepoGetAllNotes(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/test"
@@ -602,6 +636,7 @@ func TestGitRepoGetAllNotes(t *testing.T) {
 }
 
 func TestGitRepoRemotes(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	remotes, err := repo.Remotes()
 	if err != nil {
@@ -613,6 +648,7 @@ func TestGitRepoRemotes(t *testing.T) {
 }
 
 func TestGitRepoHasObject(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	has, err := repo.HasObject(headHash)
@@ -632,6 +668,7 @@ func TestGitRepoHasObject(t *testing.T) {
 }
 
 func TestGitRepoResolveRefCommit(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, err := repo.ResolveRefCommit("refs/heads/main")
 	if err != nil {
@@ -644,6 +681,7 @@ func TestGitRepoResolveRefCommit(t *testing.T) {
 }
 
 func TestGitRepoSwitchToRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	gitRun(t, repo.Path, "branch", "test-branch")
 
@@ -657,6 +695,7 @@ func TestGitRepoSwitchToRef(t *testing.T) {
 }
 
 func TestParsedDiffEmpty(t *testing.T) {
+	t.Parallel()
 	fileDiffs, err := parsedDiff("")
 	if err != nil {
 		t.Fatal(err)
@@ -667,6 +706,7 @@ func TestParsedDiffEmpty(t *testing.T) {
 }
 
 func TestGetRemoteNotesRef(t *testing.T) {
+	t.Parallel()
 	ref := getRemoteNotesRef("origin", "refs/notes/devtools/reviews")
 	expected := "refs/notes/remotes/origin/devtools/reviews"
 	if ref != expected {
@@ -675,6 +715,7 @@ func TestGetRemoteNotesRef(t *testing.T) {
 }
 
 func TestGetLocalNotesRef(t *testing.T) {
+	t.Parallel()
 	ref := getLocalNotesRef("origin", "refs/notes/remotes/origin/devtools/reviews")
 	expected := "refs/notes/devtools/reviews"
 	if ref != expected {
@@ -683,6 +724,7 @@ func TestGetLocalNotesRef(t *testing.T) {
 }
 
 func TestGetRemoteDevtoolsRef(t *testing.T) {
+	t.Parallel()
 	ref := getRemoteDevtoolsRef("origin", "refs/devtools/archives/reviews")
 	expected := "refs/remoteDevtools/origin/archives/reviews"
 	if ref != expected {
@@ -691,6 +733,7 @@ func TestGetRemoteDevtoolsRef(t *testing.T) {
 }
 
 func TestGetLocalDevtoolsRef(t *testing.T) {
+	t.Parallel()
 	ref := getLocalDevtoolsRef("origin", "refs/remoteDevtools/origin/archives/reviews")
 	expected := "refs/devtools/archives/reviews"
 	if ref != expected {
@@ -712,6 +755,7 @@ func TestGitRepoGetCoreEditor(t *testing.T) {
 }
 
 func TestGitRepoParsedDiff1(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	addCommit(t, repo, "file.txt", "changed\n", "second")
 	secondHash, _ := repo.GetCommitHash("HEAD")
@@ -729,6 +773,7 @@ func TestGitRepoParsedDiff1(t *testing.T) {
 }
 
 func TestGitRepoResolveRefCommitRemoteFallback(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	gitRun(t, repo.Path, "fetch", "origin")
 
@@ -746,6 +791,7 @@ func TestGitRepoResolveRefCommitRemoteFallback(t *testing.T) {
 }
 
 func TestGitRepoResolveRefCommitUnknown(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.ResolveRefCommit("refs/tags/nonexistent")
 	if err == nil {
@@ -754,6 +800,7 @@ func TestGitRepoResolveRefCommitUnknown(t *testing.T) {
 }
 
 func TestGitRepoResolveRefCommitNoRemoteMatch(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.ResolveRefCommit("refs/heads/nonexistent")
 	if err == nil {
@@ -762,6 +809,7 @@ func TestGitRepoResolveRefCommitNoRemoteMatch(t *testing.T) {
 }
 
 func TestGitRepoGetRefHashes(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/test"
@@ -779,6 +827,7 @@ func TestGitRepoGetRefHashes(t *testing.T) {
 }
 
 func TestGitRepoGetRefHashesInvalidPattern(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.getRefHashes("refs/notes/test")
 	if err == nil {
@@ -787,6 +836,7 @@ func TestGitRepoGetRefHashesInvalidPattern(t *testing.T) {
 }
 
 func TestGitRepoArchiveRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/test"
 
@@ -812,6 +862,7 @@ func TestGitRepoArchiveRef(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesNoRemote(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Remote archive doesn't exist; should be a no-op
 	err := repo.mergeArchives("refs/devtools/archives/local", "refs/devtools/archives/remote")
@@ -821,6 +872,7 @@ func TestGitRepoMergeArchivesNoRemote(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesNoLocal(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a remote archive but no local one
 	if err := repo.ArchiveRef("refs/heads/main", "refs/devtools/archives/remote"); err != nil {
@@ -838,6 +890,7 @@ func TestGitRepoMergeArchivesNoLocal(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesFastForward(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Build an archive chain in "remote": archive init, then archive second.
 	if err := repo.ArchiveRef("refs/heads/main", "refs/devtools/archives/remote"); err != nil {
@@ -866,6 +919,7 @@ func TestGitRepoMergeArchivesFastForward(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesMergeCommit(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Build two independent archive chains so neither is an ancestor of the other.
@@ -900,6 +954,7 @@ func TestGitRepoMergeArchivesMergeCommit(t *testing.T) {
 }
 
 func TestGitRepoMergeRefFastForward(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	gitRun(t, repo.Path, "checkout", "-b", "feature")
 	addCommit(t, repo, "feature.txt", "feature\n", "feature commit")
@@ -915,6 +970,7 @@ func TestGitRepoMergeRefFastForward(t *testing.T) {
 }
 
 func TestGitRepoMergeRefNoFastForward(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	gitRun(t, repo.Path, "checkout", "-b", "feature")
 	addCommit(t, repo, "feature.txt", "feature\n", "feature commit")
@@ -927,6 +983,7 @@ func TestGitRepoMergeRefNoFastForward(t *testing.T) {
 }
 
 func TestGitRepoMergeRefWithMessages(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	gitRun(t, repo.Path, "checkout", "-b", "feature")
 	addCommit(t, repo, "feature.txt", "feature\n", "feature commit")
@@ -941,6 +998,7 @@ func TestGitRepoMergeRefWithMessages(t *testing.T) {
 }
 
 func TestGitRepoRebaseRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	gitRun(t, repo.Path, "checkout", "-b", "feature")
 	addCommit(t, repo, "feature.txt", "feature\n", "feature commit")
@@ -957,6 +1015,7 @@ func TestGitRepoRebaseRef(t *testing.T) {
 }
 
 func TestGitRepoFetch(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	if err := repo.Fetch("origin"); err != nil {
 		t.Fatal(err)
@@ -964,6 +1023,7 @@ func TestGitRepoFetch(t *testing.T) {
 }
 
 func TestGitRepoPush(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	addCommit(t, repo, "new.txt", "new\n", "new commit")
 	if err := repo.Push("origin", "refs/heads/main:refs/heads/main"); err != nil {
@@ -972,6 +1032,7 @@ func TestGitRepoPush(t *testing.T) {
 }
 
 func TestGitRepoPushNotes(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/devtools/reviews"
@@ -984,6 +1045,7 @@ func TestGitRepoPushNotes(t *testing.T) {
 }
 
 func TestGitRepoPushNotesAndArchive(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/devtools/reviews"
@@ -1000,6 +1062,7 @@ func TestGitRepoPushNotesAndArchive(t *testing.T) {
 }
 
 func TestGitRepoPullNotes(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -1016,6 +1079,7 @@ func TestGitRepoPullNotes(t *testing.T) {
 }
 
 func TestGitRepoMergeNotes(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -1034,6 +1098,7 @@ func TestGitRepoMergeNotes(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesRemote(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 
 	// Create archive refs locally and push
@@ -1052,6 +1117,7 @@ func TestGitRepoMergeArchivesRemote(t *testing.T) {
 }
 
 func TestGitRepoFetchAndReturnNewReviewHashes(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -1068,6 +1134,7 @@ func TestGitRepoFetchAndReturnNewReviewHashes(t *testing.T) {
 }
 
 func TestGitRepoPullNotesAndArchive(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -1080,6 +1147,7 @@ func TestGitRepoPullNotesAndArchive(t *testing.T) {
 }
 
 func TestGitRepoRemotesWithRemote(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	remotes, err := repo.Remotes()
 	if err != nil {
@@ -1091,6 +1159,7 @@ func TestGitRepoRemotesWithRemote(t *testing.T) {
 }
 
 func TestGitRepoListCommitsBetweenEmpty(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	commits, err := repo.ListCommitsBetween(hash, hash)
@@ -1103,6 +1172,7 @@ func TestGitRepoListCommitsBetweenEmpty(t *testing.T) {
 }
 
 func TestGitRepoVerifyCommitNonCommit(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Store a blob and try to verify it as a commit
 	blobHash, err := repo.StoreBlob("not a commit")
@@ -1119,6 +1189,7 @@ func TestGitRepoVerifyCommitNonCommit(t *testing.T) {
 }
 
 func TestGitRepoStoreAndReadTreeNested(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	innerTree := NewTree(map[string]TreeChild{
 		"inner.txt": NewBlob("inner content"),
@@ -1150,6 +1221,7 @@ func TestGitRepoStoreAndReadTreeNested(t *testing.T) {
 }
 
 func TestGitRepoFetchAndReturnNewReviewHashesInvalidDevtools(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	_, err := repo.FetchAndReturnNewReviewHashes("origin", "refs/notes/devtools/reviews", "refs/invalid/pattern")
 	if err == nil {
@@ -1158,6 +1230,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesInvalidDevtools(t *testing.T) {
 }
 
 func TestGitRepoFetchAndReturnNewReviewHashesExisting(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -1186,6 +1259,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesExisting(t *testing.T) {
 // Mock repo additional error path tests
 
 func TestMockRepoResolveRefCommitRemoteFallback(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Add a remote ref to test the fallback
 	repo.Refs["refs/remotes/origin/feature"] = TestCommitA
@@ -1199,6 +1273,7 @@ func TestMockRepoResolveRefCommitRemoteFallback(t *testing.T) {
 }
 
 func TestMockRepoResolveRefCommitError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.ResolveRefCommit("refs/heads/nonexistent")
 	if err == nil {
@@ -1207,6 +1282,7 @@ func TestMockRepoResolveRefCommitError(t *testing.T) {
 }
 
 func TestMockRepoGetCommitHashError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.GetCommitHash("refs/heads/nonexistent")
 	if err == nil {
@@ -1215,6 +1291,7 @@ func TestMockRepoGetCommitHashError(t *testing.T) {
 }
 
 func TestMockRepoGetCommitMessageError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.GetCommitMessage("nonexistent")
 	if err == nil {
@@ -1223,6 +1300,7 @@ func TestMockRepoGetCommitMessageError(t *testing.T) {
 }
 
 func TestMockRepoGetCommitTimeError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.GetCommitTime("nonexistent")
 	if err == nil {
@@ -1231,6 +1309,7 @@ func TestMockRepoGetCommitTimeError(t *testing.T) {
 }
 
 func TestMockRepoGetCommitDetailsError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.GetCommitDetails("nonexistent")
 	if err == nil {
@@ -1239,6 +1318,7 @@ func TestMockRepoGetCommitDetailsError(t *testing.T) {
 }
 
 func TestMockRepoIsAncestorError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.IsAncestor("nonexistent", TestCommitA)
 	if err == nil {
@@ -1251,6 +1331,7 @@ func TestMockRepoIsAncestorError(t *testing.T) {
 }
 
 func TestMockRepoMergeBaseError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.MergeBase("nonexistent", TestCommitA)
 	if err == nil {
@@ -1259,6 +1340,7 @@ func TestMockRepoMergeBaseError(t *testing.T) {
 }
 
 func TestMockRepoMergeBaseNoCommonAncestor(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Add a completely disconnected commit
 	repo.Commits["Z"] = mockCommit{Message: "disconnected", Time: "99"}
@@ -1272,6 +1354,7 @@ func TestMockRepoMergeBaseNoCommonAncestor(t *testing.T) {
 }
 
 func TestMockRepoArchiveRefError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	err := repo.ArchiveRef("nonexistent", "refs/devtools/archives/test")
 	if err == nil {
@@ -1280,6 +1363,7 @@ func TestMockRepoArchiveRefError(t *testing.T) {
 }
 
 func TestMockRepoMergeRefError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	err := repo.MergeRef("nonexistent", true)
 	if err == nil {
@@ -1288,6 +1372,7 @@ func TestMockRepoMergeRefError(t *testing.T) {
 }
 
 func TestMockRepoRebaseRefDetachedHead(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Set head to a commit hash (not a branch)
 	repo.Head = TestCommitI
@@ -1301,6 +1386,7 @@ func TestMockRepoRebaseRefDetachedHead(t *testing.T) {
 }
 
 func TestMockRepoRebaseRefError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	repo.Head = "nonexistent"
 	err := repo.RebaseRef(TestTargetRef)
@@ -1310,6 +1396,7 @@ func TestMockRepoRebaseRefError(t *testing.T) {
 }
 
 func TestMockRepoListCommitsNonexistent(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	commits := repo.ListCommits("nonexistent")
 	if commits != nil {
@@ -1318,6 +1405,7 @@ func TestMockRepoListCommitsNonexistent(t *testing.T) {
 }
 
 func TestMockRepoListCommitsBetweenError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	// IsAncestor fails when 'from' can't be resolved, triggering the error path.
 	_, err := repo.ListCommitsBetween("nonexistent", TestCommitB)
@@ -1327,6 +1415,7 @@ func TestMockRepoListCommitsBetweenError(t *testing.T) {
 }
 
 func TestMockRepoHasObjectBlobAndTree(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	blobHash, _ := repo.StoreBlob("test content")
 	has, err := repo.HasObject(blobHash)
@@ -1348,6 +1437,7 @@ func TestMockRepoHasObjectBlobAndTree(t *testing.T) {
 }
 
 func TestMockRepoMergeRefNonFFError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	repo.Head = "refs/heads/master"
 	err := repo.MergeRef("nonexistent", false, "msg")
@@ -1358,6 +1448,7 @@ func TestMockRepoMergeRefNonFFError(t *testing.T) {
 
 // Test NewGitRepo exec error (non-ExitError) by using a bad PATH
 func TestGitRepoNewGitRepoNotARepo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_, err := NewGitRepo(dir)
 	if err == nil {
@@ -1368,6 +1459,7 @@ func TestGitRepoNewGitRepoNotARepo(t *testing.T) {
 // Test HasUncommittedChanges error path - requires worktree to fail.
 // With go-git, we need a bare repo (no worktree) to trigger an error.
 func TestGitRepoHasUncommittedChangesError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "--bare")
 	repo, err := NewGitRepo(dir)
@@ -1382,6 +1474,7 @@ func TestGitRepoHasUncommittedChangesError(t *testing.T) {
 
 // Test GetCommitDetails error paths
 func TestGitRepoGetCommitDetailsInvalidRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.GetCommitDetails("nonexistent_ref_12345")
 	if err == nil {
@@ -1391,6 +1484,7 @@ func TestGitRepoGetCommitDetailsInvalidRef(t *testing.T) {
 
 // Test ParsedDiff error path when Diff fails
 func TestGitRepoParsedDiffError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.ParsedDiff("nonexistent1", "nonexistent2")
 	if err == nil {
@@ -1400,6 +1494,7 @@ func TestGitRepoParsedDiffError(t *testing.T) {
 
 // Test ParsedDiff1 error path when Diff1 fails
 func TestGitRepoParsedDiff1Error(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.ParsedDiff1("nonexistent_commit_hash")
 	if err == nil {
@@ -1409,6 +1504,7 @@ func TestGitRepoParsedDiff1Error(t *testing.T) {
 
 // Test parsedDiff with binary diff (no text fragments)
 func TestParsedDiffBinary(t *testing.T) {
+	t.Parallel()
 	// Binary files produce a diff with no text fragments
 	binaryDiff := "diff --git a/file.bin b/file.bin\nnew file mode 100644\nindex 0000000..1234567\nBinary files /dev/null and b/file.bin differ\n"
 	fileDiffs, err := parsedDiff(binaryDiff)
@@ -1425,6 +1521,7 @@ func TestParsedDiffBinary(t *testing.T) {
 
 // Test ListCommits with nonexistent ref
 func TestGitRepoListCommitsNonexistent(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	commits := repo.ListCommits("nonexistent_ref")
 	if commits != nil {
@@ -1434,6 +1531,7 @@ func TestGitRepoListCommitsNonexistent(t *testing.T) {
 
 // Test ListCommitsBetween error path
 func TestGitRepoListCommitsBetweenError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.ListCommitsBetween("nonexistent1", "nonexistent2")
 	if err == nil {
@@ -1443,6 +1541,7 @@ func TestGitRepoListCommitsBetweenError(t *testing.T) {
 
 // Test readBlob error path
 func TestGitRepoReadBlobError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.readBlob("0000000000000000000000000000000000000000")
 	if err == nil {
@@ -1455,6 +1554,7 @@ func TestGitRepoReadBlobError(t *testing.T) {
 
 // Test readTreeWithHash error paths
 func TestGitRepoReadTreeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.ReadTree("0000000000000000000000000000000000000000")
 	if err == nil {
@@ -1468,6 +1568,7 @@ func TestGitRepoReadTreeError(t *testing.T) {
 // Test StoreBlob error path - go-git can always store to its object store,
 // so we verify a nil gogit handle returns an error gracefully.
 func TestGitRepoStoreBlobError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.StoreBlob("content")
 	if err == nil {
@@ -1477,6 +1578,7 @@ func TestGitRepoStoreBlobError(t *testing.T) {
 
 // Test StoreTree error path
 func TestGitRepoStoreTreeError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	contents := map[string]TreeChild{
 		"file.txt": NewBlob("content"),
@@ -1489,6 +1591,7 @@ func TestGitRepoStoreTreeError(t *testing.T) {
 
 // Test StoreTree with child store error
 func TestGitRepoStoreTreeChildError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	contents := map[string]TreeChild{
 		"bad.txt": &failingTreeChild{},
@@ -1501,6 +1604,7 @@ func TestGitRepoStoreTreeChildError(t *testing.T) {
 
 // Test CreateCommitWithTree error
 func TestGitRepoCreateCommitWithTreeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	tree := NewTree(map[string]TreeChild{
 		"bad.txt": &failingTreeChild{},
@@ -1520,6 +1624,7 @@ func TestGitRepoCreateCommitWithTreeError(t *testing.T) {
 
 // Test SetRef with previousCommitHash set (CAS path)
 func TestGitRepoSetRefCAS(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	ref := "refs/test/cas"
@@ -1535,6 +1640,7 @@ func TestGitRepoSetRefCAS(t *testing.T) {
 
 // Test mergeArchives error paths
 func TestGitRepoMergeArchivesHasRefError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	err := repo.mergeArchives("refs/devtools/local", "refs/devtools/remote")
 	if err == nil {
@@ -1543,6 +1649,7 @@ func TestGitRepoMergeArchivesHasRefError(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesGetCommitHashRemoteError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a broken remote ref by setting it to an invalid hash
 	gitRun(t, repo.Path, "update-ref", "refs/devtools/remote", "refs/heads/main")
@@ -1557,6 +1664,7 @@ func TestGitRepoMergeArchivesGetCommitHashRemoteError(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesHasLocalError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a remote archive
 	if err := repo.ArchiveRef("refs/heads/main", "refs/devtools/archives/remote"); err != nil {
@@ -1567,6 +1675,7 @@ func TestGitRepoMergeArchivesHasLocalError(t *testing.T) {
 }
 
 func TestGitRepoMergeArchivesIsAncestorError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create local and remote archives
 	if err := repo.ArchiveRef("refs/heads/main", "refs/devtools/archives/local"); err != nil {
@@ -1580,6 +1689,7 @@ func TestGitRepoMergeArchivesIsAncestorError(t *testing.T) {
 
 // Test ArchiveRef error paths
 func TestGitRepoArchiveRefGetCommitHashError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.ArchiveRef("refs/heads/nonexistent", "refs/devtools/archives/test")
 	if err == nil {
@@ -1588,6 +1698,7 @@ func TestGitRepoArchiveRefGetCommitHashError(t *testing.T) {
 }
 
 func TestGitRepoArchiveRefGetDetailsError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Store a blob and create a ref pointing to it (not a commit)
 	blobHash, err := repo.StoreBlob("not a commit")
@@ -1603,6 +1714,7 @@ func TestGitRepoArchiveRefGetDetailsError(t *testing.T) {
 
 // Test GetAllNotes error paths
 func TestGitRepoGetAllNotesOverviewError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.GetAllNotes("refs/notes/test")
 	if err == nil {
@@ -1612,6 +1724,7 @@ func TestGitRepoGetAllNotesOverviewError(t *testing.T) {
 
 // Test ListNotedRevisions error path (git notes list fails)
 func TestGitRepoListNotedRevisionsEmpty(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	revisions := repo.ListNotedRevisions("refs/notes/nonexistent")
 	if len(revisions) != 0 {
@@ -1621,6 +1734,7 @@ func TestGitRepoListNotedRevisionsEmpty(t *testing.T) {
 
 // Test Remotes error path
 func TestGitRepoRemotesError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.Remotes()
 	if err == nil {
@@ -1630,6 +1744,7 @@ func TestGitRepoRemotesError(t *testing.T) {
 
 // Test PushNotes error path
 func TestGitRepoPushNotesError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.PushNotes("nonexistent_remote", "refs/notes/*")
 	if err == nil {
@@ -1642,6 +1757,7 @@ func TestGitRepoPushNotesError(t *testing.T) {
 
 // Test PushNotesAndArchive error path
 func TestGitRepoPushNotesAndArchiveError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.PushNotesAndArchive("nonexistent_remote", "refs/notes/*", "refs/devtools/*")
 	if err == nil {
@@ -1654,6 +1770,7 @@ func TestGitRepoPushNotesAndArchiveError(t *testing.T) {
 
 // Test Push error path
 func TestGitRepoPushError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.Push("nonexistent_remote", "refs/heads/main")
 	if err == nil {
@@ -1666,6 +1783,7 @@ func TestGitRepoPushError(t *testing.T) {
 
 // Test getRefHashes error path (show-ref fails)
 func TestGitRepoGetRefHashesShowRefError(t *testing.T) {
+	t.Parallel()
 	// Create a fresh empty repo with no refs at all
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-b", "main")
@@ -1681,6 +1799,7 @@ func TestGitRepoGetRefHashesShowRefError(t *testing.T) {
 
 // Test MergeNotes error paths
 func TestGitRepoMergeNotesGetRefHashesError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Use a pattern that doesn't end with /* to trigger getRefHashes error
 	err := repo.MergeNotes("origin", "refs/notes/test")
@@ -1690,6 +1809,7 @@ func TestGitRepoMergeNotesGetRefHashesError(t *testing.T) {
 }
 
 func TestGitRepoMergeNotesNotesMergeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	// Create local and remote notes refs
@@ -1708,6 +1828,7 @@ func TestGitRepoMergeNotesNotesMergeError(t *testing.T) {
 
 // Test MergeArchives error paths
 func TestGitRepoMergeArchivesGetRefHashesError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.MergeArchives("origin", "refs/devtools/test")
 	if err == nil {
@@ -1717,6 +1838,7 @@ func TestGitRepoMergeArchivesGetRefHashesError(t *testing.T) {
 
 // Test PullNotes error path
 func TestGitRepoPullNotesError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.PullNotes("nonexistent_remote", "refs/notes/*")
 	if err == nil {
@@ -1726,6 +1848,7 @@ func TestGitRepoPullNotesError(t *testing.T) {
 
 // Test PullNotesAndArchive error paths
 func TestGitRepoPullNotesAndArchiveFetchError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.PullNotesAndArchive("nonexistent_remote", "refs/notes/devtools/*", "refs/devtools/archives/*")
 	if err == nil {
@@ -1734,6 +1857,7 @@ func TestGitRepoPullNotesAndArchiveFetchError(t *testing.T) {
 }
 
 func TestGitRepoPullNotesAndArchiveMergeArchivesError(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -1754,6 +1878,7 @@ func TestGitRepoPullNotesAndArchiveMergeArchivesError(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes error paths
 func TestGitRepoFetchAndReturnNewReviewHashesFetchError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.FetchAndReturnNewReviewHashes("nonexistent_remote", "refs/notes/devtools/*", "refs/devtools/archives/reviews")
 	if err == nil {
@@ -1763,6 +1888,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesFetchError(t *testing.T) {
 
 // Test ResolveRefCommit with for-each-ref error (exercise line 234)
 func TestGitRepoResolveRefCommitMultipleRemotes(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	// Add a second remote pointing to a different place
 	secondRemoteDir := t.TempDir()
@@ -1788,6 +1914,7 @@ func TestGitRepoResolveRefCommitMultipleRemotes(t *testing.T) {
 
 // Test readTreeWithHash malformed ls-tree output
 func TestGitRepoReadTreeMalformedTab(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Store a proper tree and read it to exercise the normal path
 	blobHash, _ := repo.StoreBlob("content")
@@ -1810,6 +1937,7 @@ func TestGitRepoReadTreeMalformedTab(t *testing.T) {
 
 // Test readTreeWithHash empty tree
 func TestGitRepoReadTreeEmpty(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create an empty tree
 	var stdout bytes.Buffer
@@ -1831,6 +1959,7 @@ func TestGitRepoReadTreeEmpty(t *testing.T) {
 
 // Test MergeArchives with mergeArchives error propagation
 func TestGitRepoMergeArchivesMergeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create remote devtools ref that causes mergeArchives to fail
 	headHash, _ := repo.GetCommitHash("HEAD")
@@ -1845,6 +1974,7 @@ func TestGitRepoMergeArchivesMergeError(t *testing.T) {
 
 // Test getRefHashes malformed show-ref output line
 func TestGitRepoGetRefHashesMalformed(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// This is hard to trigger directly since show-ref is well-formatted.
 	// But we can test that valid output works.
@@ -1864,6 +1994,7 @@ func TestGitRepoGetRefHashesMalformed(t *testing.T) {
 
 // Test that IsAncestor returns error on exec.Error (not ExitError)
 func TestGitRepoIsAncestorExecError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.IsAncestor("abc", "def")
 	if err == nil {
@@ -1876,6 +2007,7 @@ func TestGitRepoIsAncestorExecError(t *testing.T) {
 
 // Test HasRef exec error (not ExitError)
 func TestGitRepoHasRefExecError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.HasRef("refs/heads/main")
 	if err == nil {
@@ -1885,6 +2017,7 @@ func TestGitRepoHasRefExecError(t *testing.T) {
 
 // Test HasObject exec error (not ExitError)
 func TestGitRepoHasObjectExecError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	_, err := repo.HasObject("abc123")
 	if err == nil {
@@ -1894,6 +2027,7 @@ func TestGitRepoHasObjectExecError(t *testing.T) {
 
 // Test GetCommitDetails with show error propagation through the show closure
 func TestGitRepoGetCommitDetailsShowError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// An invalid ref will cause the first show call to fail
 	_, err := repo.GetCommitDetails("invalid_ref_xyz")
@@ -1904,6 +2038,7 @@ func TestGitRepoGetCommitDetailsShowError(t *testing.T) {
 
 // Test parsedDiff with all diff operations (add, delete, context)
 func TestParsedDiffWithAllOps(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a file with 3 lines, commit it
 	if err := os.WriteFile(filepath.Join(repo.Path, "ops.txt"), []byte("line1\nline2\nline3\n"), 0o644); err != nil {
@@ -1961,6 +2096,7 @@ func TestParsedDiffWithAllOps(t *testing.T) {
 
 // Test ArchiveRef IsAncestor error path
 func TestGitRepoArchiveRefIsAncestorError(t *testing.T) {
+	t.Parallel()
 	// We need ArchiveRef to call IsAncestor and have it return an error.
 	// This happens when the archive ref exists and GetCommitHash succeeds
 	// but IsAncestor returns a non-ExitError.
@@ -1969,6 +2105,7 @@ func TestGitRepoArchiveRefIsAncestorError(t *testing.T) {
 
 // Test Remotes with multiple remotes
 func TestGitRepoRemotesMultiple(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupTestRepoWithRemote(t)
 	secondRemoteDir := t.TempDir()
 	gitRun(t, secondRemoteDir, "init", "--bare")
@@ -1984,6 +2121,7 @@ func TestGitRepoRemotesMultiple(t *testing.T) {
 
 // Test GetAllNotes with non-commit annotated object
 func TestGitRepoGetAllNotesNonCommitAnnotated(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	notesRef := "refs/notes/mixed"
@@ -2014,6 +2152,7 @@ func TestGitRepoGetAllNotesNonCommitAnnotated(t *testing.T) {
 
 // Test MergeNotes with actual merge
 func TestGitRepoMergeNotesWithMerge(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2037,6 +2176,7 @@ func TestGitRepoMergeNotesWithMerge(t *testing.T) {
 
 // Test MergeNotes error when notes merge command fails
 func TestGitRepoMergeNotesNotesMergeErrorRemoteOnly(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2055,6 +2195,7 @@ func TestGitRepoMergeNotesNotesMergeErrorRemoteOnly(t *testing.T) {
 
 // Test MergeArchives merge error propagation
 func TestGitRepoMergeArchivesMergeArchivesError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2076,6 +2217,7 @@ func TestGitRepoMergeArchivesMergeArchivesError(t *testing.T) {
 
 // Test mergeArchives with GetCommitHash error for remote
 func TestGitRepoMergeArchivesGetRemoteHashError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a remote ref pointing to something but then corrupt it
 	headHash, _ := repo.GetCommitHash("HEAD")
@@ -2090,6 +2232,7 @@ func TestGitRepoMergeArchivesGetRemoteHashError(t *testing.T) {
 
 // Test mergeArchives with GetCommitHash error for local archive
 func TestGitRepoMergeArchivesGetLocalHashError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2108,6 +2251,7 @@ func TestGitRepoMergeArchivesGetLocalHashError(t *testing.T) {
 
 // Test mergeArchives commit-tree error path
 func TestGitRepoMergeArchivesCommitTreeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2139,6 +2283,7 @@ func TestGitRepoMergeArchivesCommitTreeError(t *testing.T) {
 
 // Test ArchiveRef where IsAncestor returns true (already archived)
 func TestGitRepoArchiveRefAlreadyArchived(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/idem"
 	// Archive a ref
@@ -2153,6 +2298,7 @@ func TestGitRepoArchiveRefAlreadyArchived(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes with existing baseline (diff path)
 func TestGitRepoFetchAndReturnNewReviewHashesWithBaseline(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2186,6 +2332,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesWithBaseline(t *testing.T) {
 
 // Test PullNotesAndArchive all three error paths
 func TestGitRepoPullNotesAndArchiveFetchErr(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.PullNotesAndArchive("nonexistent_remote", "refs/notes/devtools/*", "refs/devtools/archives/*")
 	if err == nil {
@@ -2197,6 +2344,7 @@ func TestGitRepoPullNotesAndArchiveFetchErr(t *testing.T) {
 }
 
 func TestGitRepoPullNotesAndArchiveMergeArchiveErr(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	gitRun(t, remoteDir, "notes", "--ref", "refs/notes/devtools/reviews", "add", "-m", "note", headHash)
@@ -2216,6 +2364,7 @@ func TestGitRepoPullNotesAndArchiveMergeArchiveErr(t *testing.T) {
 }
 
 func TestGitRepoPullNotesAndArchiveMergeNotesErr(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	gitRun(t, remoteDir, "notes", "--ref", "refs/notes/devtools/reviews", "add", "-m", "note", headHash)
@@ -2229,6 +2378,7 @@ func TestGitRepoPullNotesAndArchiveMergeNotesErr(t *testing.T) {
 
 // Test ArchiveRef commit-tree error when archive exists
 func TestGitRepoArchiveRefCommitTreeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/test2"
 
@@ -2246,6 +2396,7 @@ func TestGitRepoArchiveRefCommitTreeError(t *testing.T) {
 
 // Test mergeArchives update-ref error (fast-forward with wrong old value)
 func TestGitRepoMergeArchivesUpdateRefError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	firstHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2266,6 +2417,7 @@ func TestGitRepoMergeArchivesUpdateRefError(t *testing.T) {
 
 // Test GetCommitDetails JSON unmarshal error
 func TestGitRepoGetCommitDetailsJSONError(t *testing.T) {
+	t.Parallel()
 	// This path requires the git show output to not be valid JSON,
 	// which shouldn't happen with a real commit. But the error path exists
 	// for robustness. We test with an invalid ref which triggers
@@ -2279,6 +2431,7 @@ func TestGitRepoGetCommitDetailsJSONError(t *testing.T) {
 
 // Test ArchiveRef update-ref error path
 func TestGitRepoArchiveRefUpdateRefPaths(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/update_test"
 
@@ -2303,6 +2456,7 @@ func TestGitRepoArchiveRefUpdateRefPaths(t *testing.T) {
 
 // Test resolveLocalRef with HEAD as input
 func TestMockRepoResolveLocalRefHEADNotInRefs(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Set Head to something that is not in Refs but IS in Commits
 	repo.Head = TestCommitA
@@ -2316,6 +2470,7 @@ func TestMockRepoResolveLocalRefHEADNotInRefs(t *testing.T) {
 }
 
 func TestMockRepoResolveLocalRefHEADNotAnywhere(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Set Head to something that is in neither Refs nor Commits
 	repo.Head = "totally_invalid"
@@ -2327,6 +2482,7 @@ func TestMockRepoResolveLocalRefHEADNotAnywhere(t *testing.T) {
 
 // Test parsedDiff error from gitdiff.Parse
 func TestParsedDiffParseError(t *testing.T) {
+	t.Parallel()
 	// This specific format triggers a gitdiff.Parse error
 	malformed := "diff --git a/f b/f\n@@ -1 +1 @@\n"
 	_, err := parsedDiff(malformed)
@@ -2337,6 +2493,7 @@ func TestParsedDiffParseError(t *testing.T) {
 
 // Test PullNotesAndArchive with MergeArchives error
 func TestGitRepoPullNotesAndArchiveMergeArchivesErr2(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2358,6 +2515,7 @@ func TestGitRepoPullNotesAndArchiveMergeArchivesErr2(t *testing.T) {
 
 // Test PullNotesAndArchive with MergeNotes error
 func TestGitRepoPullNotesAndArchiveMergeNotesErr2(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2382,6 +2540,7 @@ func TestGitRepoPullNotesAndArchiveMergeNotesErr2(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes getRefHashes error before fetch
 func TestGitRepoFetchAndReturnNewReviewHashesGetRefHashesError(t *testing.T) {
+	t.Parallel()
 	// Use an empty repo (no commits) where show-ref fails
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-b", "main")
@@ -2401,6 +2560,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesGetRefHashesError(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes where prior and updated hashes are same (unchanged)
 func TestGitRepoFetchAndReturnNewReviewHashesUnchanged(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2425,6 +2585,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesUnchanged(t *testing.T) {
 
 // Test ListNotedRevisions where notes list fails (nonexistent notes ref)
 func TestGitRepoListNotedRevisionsError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: "/nonexistent/path"}
 	revisions := repo.ListNotedRevisions("refs/notes/test")
 	if revisions != nil {
@@ -2434,6 +2595,7 @@ func TestGitRepoListNotedRevisionsError(t *testing.T) {
 
 // Test MergeNotes where notes merge command fails
 func TestGitRepoMergeNotesError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2452,6 +2614,7 @@ func TestGitRepoMergeNotesError(t *testing.T) {
 
 // Test MergeArchives where mergeArchives fails
 func TestGitRepoMergeArchivesMergeArchivesFailure(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Create remote devtools ref pointing to a blob (not a commit)
@@ -2468,6 +2631,7 @@ func TestGitRepoMergeArchivesMergeArchivesFailure(t *testing.T) {
 
 // Test getRefHashes show-ref malformed output
 func TestGitRepoGetRefHashesMalformedLine(t *testing.T) {
+	t.Parallel()
 	// show-ref always produces well-formatted output with git, so the malformed
 	// line check (line 1078-1080) is defensive code. We test that valid output
 	// is parsed correctly.
@@ -2483,6 +2647,7 @@ func TestGitRepoGetRefHashesMalformedLine(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes ls-tree/diff error
 func TestGitRepoFetchAndReturnNewReviewHashesLsTreeError(t *testing.T) {
+	t.Parallel()
 	// This test would require the ls-tree or diff command to fail after
 	// fetching. This is hard to trigger without corrupting the repo.
 	// We focus on exercising the code through happy paths.
@@ -2503,6 +2668,7 @@ func TestGitRepoFetchAndReturnNewReviewHashesLsTreeError(t *testing.T) {
 
 // Test ArchiveRef IsAncestor error path (line 501-503)
 func TestGitRepoArchiveRefIsAncestorPath(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/anc_test"
 
@@ -2525,6 +2691,7 @@ func TestGitRepoArchiveRefIsAncestorPath(t *testing.T) {
 
 // Test readTreeWithHash with various object types in tree
 func TestGitRepoReadTreeWithSubmodule(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Store a simple tree and read it back
 	contents := map[string]TreeChild{
@@ -2559,6 +2726,7 @@ func TestGitRepoReadTreeWithSubmodule(t *testing.T) {
 
 // Test mergeArchives GetCommitDetails error in merge path
 func TestGitRepoMergeArchivesDivergentMerge(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Create two divergent archives
@@ -2585,6 +2753,7 @@ func TestGitRepoMergeArchivesDivergentMerge(t *testing.T) {
 
 // Test GetCommitDetails error in show calls after JSON parse
 func TestGitRepoGetCommitDetailsPartialError(t *testing.T) {
+	t.Parallel()
 	// GetCommitDetails uses a closure that short-circuits on error.
 	// The first show call gets JSON, then subsequent calls get individual fields.
 	// All calls use the same ref, so if the first succeeds, the rest should too.
@@ -2617,6 +2786,7 @@ func TestGitRepoGetCommitDetailsPartialError(t *testing.T) {
 
 // Test ResolveRefCommit for-each-ref error path
 func TestGitRepoResolveRefCommitForEachRefError(t *testing.T) {
+	t.Parallel()
 	// The for-each-ref command almost never fails with valid patterns.
 	// Line 234-236 is defensive code.
 	repo := setupTestRepo(t)
@@ -2629,6 +2799,7 @@ func TestGitRepoResolveRefCommitForEachRefError(t *testing.T) {
 
 // Test readTreeWithHash with a tree containing a commit object (submodule)
 func TestGitRepoReadTreeWithCommitObject(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2655,6 +2826,7 @@ func TestGitRepoReadTreeWithCommitObject(t *testing.T) {
 
 // Test readTreeWithHash with a tree containing a blob that can't be read
 func TestGitRepoReadTreeWithMissingBlob(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Create a tree entry referencing a nonexistent blob hash using --missing
@@ -2680,6 +2852,7 @@ func TestGitRepoReadTreeWithMissingBlob(t *testing.T) {
 
 // Test readTreeWithHash with a tree containing a subtree that can't be read
 func TestGitRepoReadTreeWithMissingSubtree(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Create a tree entry referencing a nonexistent tree hash using --missing
@@ -2705,6 +2878,7 @@ func TestGitRepoReadTreeWithMissingSubtree(t *testing.T) {
 
 // Test PullNotesAndArchive MergeNotes error path
 func TestGitRepoPullNotesAndArchiveMergeNotesErr3(t *testing.T) {
+	t.Parallel()
 	repo, remoteDir := setupTestRepoWithRemote(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2737,6 +2911,7 @@ func TestGitRepoPullNotesAndArchiveMergeNotesErr3(t *testing.T) {
 
 // Test mergeArchives with all error paths
 func TestGitRepoMergeArchivesAllPaths(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Path 1: Remote doesn't exist (already tested)
@@ -2802,6 +2977,7 @@ func TestGitRepoMergeArchivesAllPaths(t *testing.T) {
 
 // Test MergeNotes with actual notes merge error
 func TestGitRepoMergeNotesActualMergeError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 
@@ -2826,6 +3002,7 @@ func TestGitRepoMergeNotesActualMergeError(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes getRefHashes error after fetch
 func TestGitRepoFetchAndReturnNewReviewHashesPostFetchError(t *testing.T) {
+	t.Parallel()
 	// Line 1197: getRefHashes error after fetch. This would require show-ref
 	// to fail after a successful fetch. Very hard to trigger without corruption.
 	// The test for getRefHashes error before fetch already covers the error message format.
@@ -2833,12 +3010,14 @@ func TestGitRepoFetchAndReturnNewReviewHashesPostFetchError(t *testing.T) {
 
 // Test FetchAndReturnNewReviewHashes ls-tree/diff error after discovering changes
 func TestGitRepoFetchAndReturnNewReviewHashesLsDiffError(t *testing.T) {
+	t.Parallel()
 	// Line 1217: Error from ls-tree or diff. Hard to trigger without corrupted refs.
 	// Already covered indirectly by the successful path.
 }
 
 // Test readTreeWithHash malformed ls-tree tab parsing
 func TestGitRepoReadTreeMalformedTabParsing(t *testing.T) {
+	t.Parallel()
 	// Lines 659-661: len(lineParts) != 2 after tab split.
 	// Git's ls-tree output always has exactly one tab, so this path
 	// is defensive and can't be triggered with a real git repo.
@@ -2857,6 +3036,7 @@ func TestGitRepoReadTreeMalformedTabParsing(t *testing.T) {
 
 // Test readTreeWithHash malformed space parsing
 func TestGitRepoReadTreeMalformedSpaceParsing(t *testing.T) {
+	t.Parallel()
 	// Lines 664-666: len(lineParts) != 3 after space split.
 	// Git's ls-tree output always has exactly three space-separated fields.
 	// This is defensive code.
@@ -2884,6 +3064,7 @@ func TestGitRepoReadTreeMalformedSpaceParsing(t *testing.T) {
 }
 
 func TestGitRepoMergeNotesCorruptLocalRef(t *testing.T) {
+	t.Parallel()
 	// Trigger line 1117: git notes merge fails when the local notes ref
 	// points to a corrupted (non-tree) object.
 	repo, remoteDir := setupTestRepoWithRemote(t)
@@ -2911,6 +3092,7 @@ func TestGitRepoMergeNotesCorruptLocalRef(t *testing.T) {
 }
 
 func TestGitRepoPullNotesAndArchiveMergeNotesCorrupt(t *testing.T) {
+	t.Parallel()
 	// Trigger line 1253: MergeNotes fails in PullNotesAndArchive after
 	// FetchAndReturnNewReviewHashes and MergeArchives succeed.
 	repo, remoteDir := setupTestRepoWithRemote(t)
@@ -2950,6 +3132,7 @@ func TestGitRepoPullNotesAndArchiveMergeNotesCorrupt(t *testing.T) {
 }
 
 func TestGitRepoFetchAndReturnNewReviewHashesLsTreeFail(t *testing.T) {
+	t.Parallel()
 	// Trigger line 1217: ls-tree fails on a newly-fetched ref that points
 	// to a non-tree object (a blob).
 	repo, remoteDir := setupTestRepoWithRemote(t)
@@ -3011,6 +3194,7 @@ func TestResolveRefCommitForEachRefError(t *testing.T) {
 }
 
 func TestGetCommitDetailsShowError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.GetCommitDetails("refs/heads/nonexistent")
 	if err == nil {
@@ -3019,6 +3203,7 @@ func TestGetCommitDetailsShowError(t *testing.T) {
 }
 
 func TestMergeArchivesGetCommitHashRemoteError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/reviews"
 	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
@@ -3034,6 +3219,7 @@ func TestMergeArchivesGetCommitHashRemoteError(t *testing.T) {
 }
 
 func TestMergeArchivesHasRefLocalError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/reviews"
 	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
@@ -3049,6 +3235,7 @@ func TestMergeArchivesHasRefLocalError(t *testing.T) {
 }
 
 func TestMergeArchivesGetCommitHashLocalError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/reviews"
 	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
@@ -3064,6 +3251,7 @@ func TestMergeArchivesGetCommitHashLocalError(t *testing.T) {
 }
 
 func TestMergeArchivesIsAncestorError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	archive := "refs/devtools/archives/reviews"
 	remoteArchive := "refs/remoteDevtools/origin/archives/reviews"
@@ -3080,6 +3268,7 @@ func TestMergeArchivesIsAncestorError(t *testing.T) {
 }
 
 func TestMergeArchivesGetCommitDetailsError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	err := repo.mergeArchives("refs/devtools/archives/reviews", "refs/remoteDevtools/origin/archives/reviews")
 	if err == nil {
@@ -3108,6 +3297,7 @@ func TestMergeArchivesCommitTreeError(t *testing.T) {
 }
 
 func TestArchiveRefIsAncestorError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	addCommit(t, repo, "a.txt", "a", "commit a")
 	treeHash := gitRun(t, repo.Path, "rev-parse", "HEAD^{tree}")
@@ -3135,6 +3325,7 @@ func TestArchiveRefCommitTreeError(t *testing.T) {
 }
 
 func TestReadTreeWithHashMalformedNoTab(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	commitHash := gitRun(t, repo.Path, "rev-parse", "HEAD")
 	_, err := repo.ReadTree(commitHash)
@@ -3144,6 +3335,7 @@ func TestReadTreeWithHashMalformedNoTab(t *testing.T) {
 }
 
 func TestReadTreeWithHashMalformedBadParts(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	addCommit(t, repo, "file.txt", "content", "add file")
 	blobHash := gitRun(t, repo.Path, "rev-parse", "HEAD:file.txt")
@@ -3154,6 +3346,7 @@ func TestReadTreeWithHashMalformedBadParts(t *testing.T) {
 }
 
 func TestGetRefHashesMalformedShowRef(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	_, err := repo.getRefHashes("refs/notes/*")
 	if err == nil {
@@ -3165,6 +3358,7 @@ func TestGetRefHashesMalformedShowRef(t *testing.T) {
 }
 
 func TestFetchAndReturnNewReviewHashesPostFetchGetRefHashesError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	_, err := repo.FetchAndReturnNewReviewHashes("origin", "refs/notes/devtools/*")
 	if err == nil {
@@ -3178,6 +3372,7 @@ func TestFetchAndReturnNewReviewHashesPostFetchGetRefHashesError(t *testing.T) {
 // TestNilGogitErrors tests that all methods with a gogit == nil guard
 // return errNotInitialized when called on a repo without a go-git handle.
 func TestNilGogitErrors(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 
 	if _, err := repo.HasRef("refs/heads/main"); err != errNotInitialized {
@@ -3241,6 +3436,7 @@ func TestNilGogitErrors(t *testing.T) {
 
 // TestResolveRevisionErrors tests error paths in methods that call resolveRevision.
 func TestResolveRevisionErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	badRef := "refs/heads/nonexistent_branch_12345"
 
@@ -3275,6 +3471,7 @@ func TestResolveRevisionErrors(t *testing.T) {
 
 // TestShowErrors tests error paths in Show beyond bad refs.
 func TestShowErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	if _, err := repo.Show("HEAD", "nonexistent_file.txt"); err == nil {
 		t.Error("Show: expected error for nonexistent file")
@@ -3283,6 +3480,7 @@ func TestShowErrors(t *testing.T) {
 
 // TestGetLastParentRootCommit tests GetLastParent on a commit with no parents.
 func TestGetLastParentRootCommit(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// The initial commit has no parents.
 	hash := gitRun(t, repo.Path, "rev-list", "--max-parents=0", "HEAD")
@@ -3297,6 +3495,7 @@ func TestGetLastParentRootCommit(t *testing.T) {
 
 // TestGetHeadRefDetached tests GetHeadRef when HEAD is detached.
 func TestGetHeadRefDetached(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	gitRun(t, repo.Path, "checkout", "--detach", hash)
@@ -3330,6 +3529,7 @@ func TestGetUserEmailNotConfigured(t *testing.T) {
 
 // TestNewGitRepoBare tests NewGitRepo on a bare repository.
 func TestNewGitRepoBare(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "--bare")
 	repo, err := NewGitRepo(dir)
@@ -3343,6 +3543,7 @@ func TestNewGitRepoBare(t *testing.T) {
 
 // TestNewGitRepoInvalid tests NewGitRepo on a path that is not a repo.
 func TestNewGitRepoInvalid(t *testing.T) {
+	t.Parallel()
 	_, err := NewGitRepo(t.TempDir())
 	if err == nil {
 		t.Error("expected error for non-repo directory")
@@ -3351,6 +3552,7 @@ func TestNewGitRepoInvalid(t *testing.T) {
 
 // TestSwitchToRefErrors tests SwitchToRef error paths.
 func TestSwitchToRefErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	if err := repo.SwitchToRef("refs/heads/nonexistent_branch_12345"); err == nil {
 		t.Error("expected error for nonexistent branch")
@@ -3415,6 +3617,7 @@ func TestCreateCommitError(t *testing.T) {
 
 // TestCreateCommitEmptyParent tests that CreateCommit skips empty parent strings.
 func TestCreateCommitEmptyParent(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	details, _ := repo.GetCommitDetails("HEAD")
 	details.Parents = []string{"", details.Parents[0]}
@@ -3426,6 +3629,7 @@ func TestCreateCommitEmptyParent(t *testing.T) {
 
 // TestParseGitTimeErrors tests parseGitTime edge cases.
 func TestParseGitTimeErrors(t *testing.T) {
+	t.Parallel()
 	if _, err := parseGitTime(""); err == nil {
 		t.Error("expected error for empty time string")
 	}
@@ -3440,6 +3644,7 @@ func TestParseGitTimeErrors(t *testing.T) {
 
 // TestResolveRefCommitErrors tests the error paths in ResolveRefCommit.
 func TestResolveRefCommitErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Non-branch ref that doesn't exist
 	_, err := repo.ResolveRefCommit("refs/tags/nonexistent")
@@ -3455,6 +3660,7 @@ func TestResolveRefCommitErrors(t *testing.T) {
 
 // TestMergeBaseNoCommonAncestor tests MergeBase with disconnected histories.
 func TestMergeBaseNoCommonAncestor(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create an orphan branch with no common ancestor
 	gitRun(t, repo.Path, "checkout", "--orphan", "orphan")
@@ -3478,6 +3684,7 @@ func TestMergeBaseNoCommonAncestor(t *testing.T) {
 
 // TestArchiveRefErrors tests ArchiveRef error path for bad ref.
 func TestArchiveRefErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	err := repo.ArchiveRef("nonexistent_ref_12345", "refs/devtools/archives/test")
 	if err == nil {
@@ -3487,6 +3694,7 @@ func TestArchiveRefErrors(t *testing.T) {
 
 // TestIsAncestorCommitObjectError tests IsAncestor when CommitObject fails.
 func TestIsAncestorCommitObjectError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Store a blob and try to use its hash as a commit ref
 	blobHash, err := repo.StoreBlob("not a commit")
@@ -3507,6 +3715,7 @@ func TestIsAncestorCommitObjectError(t *testing.T) {
 
 // TestListCommitsLogError tests ListCommits with a bad ref.
 func TestListCommitsLogError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	result := repo.ListCommits("nonexistent_ref_12345")
 	if result != nil {
@@ -3516,6 +3725,7 @@ func TestListCommitsLogError(t *testing.T) {
 
 // TestListCommitsBlobHash tests ListCommits when Log fails on a non-commit hash.
 func TestListCommitsBlobHash(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	blobHash, _ := repo.StoreBlob("not a commit")
 	result := repo.ListCommits(blobHash)
@@ -3526,6 +3736,7 @@ func TestListCommitsBlobHash(t *testing.T) {
 
 // TestGetLastParentNonRoot tests GetLastParent on a non-root commit that has parents.
 func TestGetLastParentNonRoot(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	result, err := repo.GetLastParent("HEAD")
 	if err != nil {
@@ -3551,6 +3762,7 @@ func TestGetLastParentNonRoot(t *testing.T) {
 
 // TestSwitchToRefBareRepo tests SwitchToRef on a bare repository (Worktree error).
 func TestSwitchToRefBareRepo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "--bare")
 	repo, err := NewGitRepo(dir)
@@ -3565,6 +3777,7 @@ func TestSwitchToRefBareRepo(t *testing.T) {
 
 // TestSwitchToRefByHash tests SwitchToRef with a commit hash (non-branch ref).
 func TestSwitchToRefByHash(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	err := repo.SwitchToRef(hash)
@@ -3622,6 +3835,7 @@ func TestTestSeamReferencesForEachError(t *testing.T) {
 
 // TestGetRepoStateHashSortBody tests that the sort comparator is exercised with multiple refs.
 func TestGetRepoStateHashSortBody(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a second branch so there are at least 2 refs under refs/
 	gitRun(t, repo.Path, "branch", "second-branch")
@@ -3701,6 +3915,7 @@ func TestTestSeamRemotesError(t *testing.T) {
 
 // TestMergeBaseGraphError tests MergeBase when graph traversal fails.
 func TestMergeBaseGraphError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	treeHash, _ := repo.GetCommitDetails("HEAD")
 	// Create a commit with a non-existent parent, causing graph traversal errors
@@ -3722,6 +3937,7 @@ func TestMergeBaseGraphError(t *testing.T) {
 
 // TestIsAncestorGraphError tests IsAncestor when graph traversal fails.
 func TestIsAncestorGraphError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	treeHash, _ := repo.GetCommitDetails("HEAD")
 	details := &CommitDetails{
@@ -3742,6 +3958,7 @@ func TestIsAncestorGraphError(t *testing.T) {
 
 // TestMergeArchivesIsAncestorGraphError tests mergeArchives when IsAncestor hits a bad graph.
 func TestMergeArchivesIsAncestorGraphError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	headDetails, _ := repo.GetCommitDetails("HEAD")
@@ -3778,6 +3995,7 @@ func TestMergeArchivesIsAncestorGraphError(t *testing.T) {
 
 // TestArchiveRefIsAncestorGraphError tests ArchiveRef error when IsAncestor hits a bad graph.
 func TestArchiveRefIsAncestorGraphError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headDetails, _ := repo.GetCommitDetails("HEAD")
 
@@ -3800,6 +4018,7 @@ func TestArchiveRefIsAncestorGraphError(t *testing.T) {
 
 // TestMergeArchivesGetCommitDetailsBlobRef tests mergeArchives when remote archive points to a blob.
 func TestMergeArchivesGetCommitDetailsBlobRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	headHash, _ := repo.GetCommitHash("HEAD")
 	headDetails, _ := repo.GetCommitDetails("HEAD")
@@ -3829,6 +4048,7 @@ func TestMergeArchivesGetCommitDetailsBlobRef(t *testing.T) {
 
 // TestArchiveRefGetCommitDetailsBlobRef tests ArchiveRef when ref points to a blob.
 func TestArchiveRefGetCommitDetailsBlobRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	blobHash, _ := repo.StoreBlob("not a commit")
 	// Create a ref pointing to a blob
@@ -3988,6 +4208,7 @@ func TestGetCoreEditorFallbacks(t *testing.T) {
 }
 
 func TestListCommitsBetweenNilGogit(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	_, err := repo.ListCommitsBetween("a", "b")
 	if err != errNotInitialized {
@@ -3996,6 +4217,7 @@ func TestListCommitsBetweenNilGogit(t *testing.T) {
 }
 
 func TestListCommitsBetweenBadToRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// "from" resolves (HEAD), but "to" is invalid.
 	_, err := repo.ListCommitsBetween("HEAD", "nonexistent_ref_xyz")
@@ -4005,6 +4227,7 @@ func TestListCommitsBetweenBadToRef(t *testing.T) {
 }
 
 func TestGetNotesReadBlobError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	// Append a note so the ref exists.
@@ -4019,6 +4242,7 @@ func TestGetNotesReadBlobError(t *testing.T) {
 }
 
 func TestGetAllNotesReadBlobError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	if err := repo.AppendNote("refs/notes/test", hash, Note("test note")); err != nil {
@@ -4035,6 +4259,7 @@ func TestGetAllNotesReadBlobError(t *testing.T) {
 }
 
 func TestGetAllNotesEmptyRef(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Non-existent ref returns nil.
 	allNotes, err := repo.GetAllNotes("refs/notes/nonexistent")
@@ -4047,6 +4272,7 @@ func TestGetAllNotesEmptyRef(t *testing.T) {
 }
 
 func TestGetAllNotesError(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	_, err := repo.GetAllNotes("refs/notes/test")
 	if err != errNotInitialized {
@@ -4055,6 +4281,7 @@ func TestGetAllNotesError(t *testing.T) {
 }
 
 func TestListNotedRevisionsNonCommitEntry(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Store a blob and annotate it (not a commit). ListNotedRevisions should
 	// filter it out since it only returns commits.
@@ -4074,6 +4301,7 @@ func TestListNotedRevisionsNonCommitEntry(t *testing.T) {
 }
 
 func TestAppendNoteNilGogit(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	err := repo.AppendNote("refs/notes/test", "abc", Note("test"))
 	if err != errNotInitialized {
@@ -4082,6 +4310,7 @@ func TestAppendNoteNilGogit(t *testing.T) {
 }
 
 func TestAppendNoteReadNotesCommitError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a non-commit ref to trigger readNotesCommit error.
 	blobHash, _ := repo.StoreBlob("not a commit")
@@ -4093,6 +4322,7 @@ func TestAppendNoteReadNotesCommitError(t *testing.T) {
 }
 
 func TestAppendNoteExistingNote(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	// Append first note.
@@ -4161,6 +4391,7 @@ func TestAppendNoteCommitStoreError(t *testing.T) {
 }
 
 func TestFetchNilGogit(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	err := repo.Fetch("origin", "refs/heads/*:refs/remotes/origin/*")
 	if err != errNotInitialized {
@@ -4169,6 +4400,7 @@ func TestFetchNilGogit(t *testing.T) {
 }
 
 func TestPushNilGogit(t *testing.T) {
+	t.Parallel()
 	repo := &GitRepo{Path: t.TempDir()}
 	err := repo.Push("origin", "refs/heads/*:refs/heads/*")
 	if err != errNotInitialized {
@@ -4177,6 +4409,7 @@ func TestPushNilGogit(t *testing.T) {
 }
 
 func TestPushAlreadyUpToDate(t *testing.T) {
+	t.Parallel()
 	local, remoteDir := setupTestRepoWithRemote(t)
 	gitRun(t, local.Path, "push", "origin", "main")
 	// Push again — should get NoErrAlreadyUpToDate (handled as nil).
@@ -4192,6 +4425,7 @@ func TestPushAlreadyUpToDate(t *testing.T) {
 }
 
 func TestMergeNotesRefRemoteNotExist(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// mergeNotesRef with a remote ref that doesn't exist should be a no-op.
 	err := repo.mergeNotesRef("refs/notes/local", "refs/notes/remotes/origin/nonexistent")
@@ -4201,6 +4435,7 @@ func TestMergeNotesRefRemoteNotExist(t *testing.T) {
 }
 
 func TestMergeNotesRefReadNotesCommitError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a non-commit ref for the remote notes.
 	blobHash, _ := repo.StoreBlob("not a commit")
@@ -4212,6 +4447,7 @@ func TestMergeNotesRefReadNotesCommitError(t *testing.T) {
 }
 
 func TestMergeNotesRefSameBlobs(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	// Append same note to both local and remote refs.
@@ -4229,6 +4465,7 @@ func TestMergeNotesRefSameBlobs(t *testing.T) {
 }
 
 func TestMergeNotesRefDifferentBlobs(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	// Append different notes to local and remote refs.
@@ -4315,6 +4552,7 @@ func TestMergeNotesRefStoreBlobError(t *testing.T) {
 }
 
 func TestDiffTreeNamesFromCommitError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	_, err := repo.diffTreeNames("0000000000000000000000000000000000000000", "0000000000000000000000000000000000000001")
 	if err == nil {
@@ -4323,6 +4561,7 @@ func TestDiffTreeNamesFromCommitError(t *testing.T) {
 }
 
 func TestDiffTreeNamesToCommitError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 	_, err := repo.diffTreeNames(hash, "0000000000000000000000000000000000000001")
@@ -4332,6 +4571,7 @@ func TestDiffTreeNamesToCommitError(t *testing.T) {
 }
 
 func TestDiffTreeNamesDeletedFile(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash1, _ := repo.GetCommitHash("HEAD")
 	// Add a file then delete it to get a change with From.Name set.
@@ -4353,6 +4593,7 @@ func TestDiffTreeNamesDeletedFile(t *testing.T) {
 }
 
 func TestNotesFanout(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 
 	// Create notes using git CLI with fan-out to exercise the fan-out code paths.
@@ -4418,6 +4659,7 @@ func storeFanoutTree(t *testing.T, repo *GitRepo, revision string, blobHash plum
 }
 
 func TestBuildNotesTreeFanout(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4445,6 +4687,7 @@ func TestBuildNotesTreeFanout(t *testing.T) {
 }
 
 func TestBuildNotesTreeFanoutSamePrefix(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4559,6 +4802,7 @@ func TestBuildNotesTreeFanoutNewPrefixStoreError(t *testing.T) {
 }
 
 func TestGetNotesFanout(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4604,6 +4848,7 @@ func TestGetNotesFanout(t *testing.T) {
 }
 
 func TestGetNotesReadBlobContentError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4658,6 +4903,7 @@ func TestReadNotesCommitReferenceError(t *testing.T) {
 }
 
 func TestMergeNotesRefReadBlobError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4698,6 +4944,7 @@ func TestMergeNotesRefReadBlobError(t *testing.T) {
 }
 
 func TestLookupNoteEntryBadSubtree(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4723,6 +4970,7 @@ func TestLookupNoteEntryBadSubtree(t *testing.T) {
 }
 
 func TestMergeNotesRefRemoteBlobError(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	hash, _ := repo.GetCommitHash("HEAD")
 
@@ -4753,6 +5001,7 @@ func TestMergeNotesRefRemoteBlobError(t *testing.T) {
 }
 
 func TestDiffTreeNamesFromNameBranch(t *testing.T) {
+	t.Parallel()
 	repo := setupTestRepo(t)
 	// Create a commit where a file is deleted to get From.Name set.
 	hash1, _ := repo.GetCommitHash("HEAD")

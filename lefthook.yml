@@ -10,12 +10,9 @@ pre-commit:
     go-fix:
       glob: "*.go"
       run: test -z "$(go fix -diff ./...)" || { echo "Run 'go fix ./...' to apply fixes"; exit 1; }
-    go-build:
-      glob: "*.go"
-      run: go build ./...
     test-coverage:
       glob: "*.go"
       run: >-
-        go test -coverprofile=coverage.out -count=1 ./... &&
+        go test -coverprofile=coverage.out ./... &&
         go tool cover -func=coverage.out |
         awk '/^total:/ { if ($3 != "100.0%") { print "Coverage is " $3 ", expected 100.0%"; exit 1 } }'

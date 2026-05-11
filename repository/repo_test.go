@@ -7,6 +7,7 @@ import (
 )
 
 func TestNoteHash(t *testing.T) {
+	t.Parallel()
 	n := Note("test content")
 	h1 := n.Hash()
 	h2 := n.Hash()
@@ -19,6 +20,7 @@ func TestNoteHash(t *testing.T) {
 }
 
 func TestNoteHashDifferent(t *testing.T) {
+	t.Parallel()
 	n1 := Note("content A")
 	n2 := Note("content B")
 	if n1.Hash() == n2.Hash() {
@@ -27,6 +29,7 @@ func TestNoteHashDifferent(t *testing.T) {
 }
 
 func TestNewBlob(t *testing.T) {
+	t.Parallel()
 	b := NewBlob("hello world")
 	if b.Contents() != "hello world" {
 		t.Fatalf("unexpected contents: %q", b.Contents())
@@ -37,6 +40,7 @@ func TestNewBlob(t *testing.T) {
 }
 
 func TestBlobStore(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	b := NewBlob("test blob")
 	hash, err := b.Store(repo)
@@ -57,6 +61,7 @@ func TestBlobStore(t *testing.T) {
 }
 
 func TestNewTree(t *testing.T) {
+	t.Parallel()
 	contents := map[string]TreeChild{
 		"file.txt": NewBlob("content"),
 	}
@@ -74,6 +79,7 @@ func TestNewTree(t *testing.T) {
 }
 
 func TestTreeImmutable(t *testing.T) {
+	t.Parallel()
 	contents := map[string]TreeChild{
 		"file.txt": NewBlob("content"),
 	}
@@ -92,6 +98,7 @@ func TestTreeImmutable(t *testing.T) {
 }
 
 func TestTreeStore(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	tree := NewTree(map[string]TreeChild{
 		"a.txt": NewBlob("aaa"),
@@ -115,6 +122,7 @@ func TestTreeStore(t *testing.T) {
 }
 
 func TestTreeNested(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	inner := NewTree(map[string]TreeChild{
 		"inner.txt": NewBlob("inner content"),
@@ -132,6 +140,7 @@ func TestTreeNested(t *testing.T) {
 }
 
 func TestDiffOpString(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		op       DiffOp
 		expected string
@@ -149,6 +158,7 @@ func TestDiffOpString(t *testing.T) {
 }
 
 func TestMockRepoBasics(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if repo.GetPath() != "~/mockRepo/" {
 		t.Fatalf("unexpected path: %q", repo.GetPath())
@@ -191,6 +201,7 @@ func TestMockRepoBasics(t *testing.T) {
 }
 
 func TestMockRepoStateHash(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	hash, err := repo.GetRepoStateHash()
 	if err != nil {
@@ -202,6 +213,7 @@ func TestMockRepoStateHash(t *testing.T) {
 }
 
 func TestMockRepoHasRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	has, err := repo.HasRef(TestTargetRef)
 	if err != nil {
@@ -220,6 +232,7 @@ func TestMockRepoHasRef(t *testing.T) {
 }
 
 func TestMockRepoHasObject(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	has, err := repo.HasObject(TestCommitA)
 	if err != nil {
@@ -238,6 +251,7 @@ func TestMockRepoHasObject(t *testing.T) {
 }
 
 func TestMockRepoVerifyCommit(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.VerifyCommit(TestCommitA); err != nil {
 		t.Fatal(err)
@@ -248,6 +262,7 @@ func TestMockRepoVerifyCommit(t *testing.T) {
 }
 
 func TestMockRepoVerifyGitRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.VerifyGitRef(TestTargetRef); err != nil {
 		t.Fatal(err)
@@ -258,6 +273,7 @@ func TestMockRepoVerifyGitRef(t *testing.T) {
 }
 
 func TestMockRepoGetHeadRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	head, err := repo.GetHeadRef()
 	if err != nil {
@@ -269,6 +285,7 @@ func TestMockRepoGetHeadRef(t *testing.T) {
 }
 
 func TestMockRepoGetCommitHash(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	hash, err := repo.GetCommitHash(TestTargetRef)
 	if err != nil {
@@ -287,6 +304,7 @@ func TestMockRepoGetCommitHash(t *testing.T) {
 }
 
 func TestMockRepoResolveRefCommit(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	hash, err := repo.ResolveRefCommit(TestTargetRef)
 	if err != nil {
@@ -298,6 +316,7 @@ func TestMockRepoResolveRefCommit(t *testing.T) {
 }
 
 func TestMockRepoGetCommitMessage(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	msg, err := repo.GetCommitMessage(TestCommitA)
 	if err != nil {
@@ -309,6 +328,7 @@ func TestMockRepoGetCommitMessage(t *testing.T) {
 }
 
 func TestMockRepoGetCommitTime(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	time, err := repo.GetCommitTime(TestCommitA)
 	if err != nil {
@@ -320,6 +340,7 @@ func TestMockRepoGetCommitTime(t *testing.T) {
 }
 
 func TestMockRepoGetLastParent(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	parent, err := repo.GetLastParent(TestCommitD)
 	if err != nil {
@@ -339,6 +360,7 @@ func TestMockRepoGetLastParent(t *testing.T) {
 }
 
 func TestMockRepoGetCommitDetails(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	details, err := repo.GetCommitDetails(TestCommitB)
 	if err != nil {
@@ -356,6 +378,7 @@ func TestMockRepoGetCommitDetails(t *testing.T) {
 }
 
 func TestMockRepoIsAncestor(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	is, err := repo.IsAncestor(TestCommitA, TestCommitD)
 	if err != nil {
@@ -382,6 +405,7 @@ func TestMockRepoIsAncestor(t *testing.T) {
 }
 
 func TestMockRepoMergeBase(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	base, err := repo.MergeBase(TestCommitB, TestCommitC)
 	if err != nil {
@@ -393,6 +417,7 @@ func TestMockRepoMergeBase(t *testing.T) {
 }
 
 func TestMockRepoDiff(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	diff, err := repo.Diff(TestCommitA, TestCommitB)
 	if err != nil {
@@ -404,6 +429,7 @@ func TestMockRepoDiff(t *testing.T) {
 }
 
 func TestMockRepoDiff1(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	diff, err := repo.Diff1(TestCommitB)
 	if err != nil {
@@ -415,6 +441,7 @@ func TestMockRepoDiff1(t *testing.T) {
 }
 
 func TestMockRepoParsedDiff(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	fileDiffs, err := repo.ParsedDiff(TestCommitA, TestCommitB)
 	if err != nil {
@@ -429,6 +456,7 @@ func TestMockRepoParsedDiff(t *testing.T) {
 }
 
 func TestMockRepoParsedDiff1(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	fileDiffs, err := repo.ParsedDiff1(TestCommitB)
 	if err != nil {
@@ -440,6 +468,7 @@ func TestMockRepoParsedDiff1(t *testing.T) {
 }
 
 func TestMockRepoShow(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	content, err := repo.Show(TestCommitA, "file.txt")
 	if err != nil {
@@ -451,6 +480,7 @@ func TestMockRepoShow(t *testing.T) {
 }
 
 func TestMockRepoSwitchToRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.SwitchToRef(TestReviewRef); err != nil {
 		t.Fatal(err)
@@ -462,6 +492,7 @@ func TestMockRepoSwitchToRef(t *testing.T) {
 }
 
 func TestMockRepoArchiveRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	archive := "refs/devtools/archives/test"
 	if err := repo.ArchiveRef(TestCommitA, archive); err != nil {
@@ -478,6 +509,7 @@ func TestMockRepoArchiveRef(t *testing.T) {
 }
 
 func TestMockRepoMergeRefFastForward(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.SwitchToRef(TestTargetRef); err != nil {
 		t.Fatal(err)
@@ -492,6 +524,7 @@ func TestMockRepoMergeRefFastForward(t *testing.T) {
 }
 
 func TestMockRepoMergeRefNonFastForward(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.SwitchToRef(TestTargetRef); err != nil {
 		t.Fatal(err)
@@ -507,6 +540,7 @@ func TestMockRepoMergeRefNonFastForward(t *testing.T) {
 }
 
 func TestMockRepoRebaseRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.SwitchToRef(TestReviewRef); err != nil {
 		t.Fatal(err)
@@ -521,6 +555,7 @@ func TestMockRepoRebaseRef(t *testing.T) {
 }
 
 func TestMockRepoListCommits(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	commits := repo.ListCommits(TestTargetRef)
 	if len(commits) == 0 {
@@ -533,6 +568,7 @@ func TestMockRepoListCommits(t *testing.T) {
 }
 
 func TestMockRepoListCommitsBetween(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	commits, err := repo.ListCommitsBetween(TestCommitA, TestCommitB)
 	if err != nil {
@@ -544,6 +580,7 @@ func TestMockRepoListCommitsBetween(t *testing.T) {
 }
 
 func TestMockRepoStoreAndReadTree(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	contents := map[string]TreeChild{
 		"file.txt": NewBlob("hello"),
@@ -563,6 +600,7 @@ func TestMockRepoStoreAndReadTree(t *testing.T) {
 }
 
 func TestMockRepoReadTreeNotFound(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	_, err := repo.ReadTree("nonexistent")
 	if err == nil {
@@ -571,6 +609,7 @@ func TestMockRepoReadTreeNotFound(t *testing.T) {
 }
 
 func TestMockRepoCreateCommit(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	details := &CommitDetails{
 		Summary: "test commit",
@@ -590,6 +629,7 @@ func TestMockRepoCreateCommit(t *testing.T) {
 }
 
 func TestMockRepoCreateCommitWithTree(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	tree := NewTree(map[string]TreeChild{
 		"file.txt": NewBlob("content"),
@@ -609,6 +649,7 @@ func TestMockRepoCreateCommitWithTree(t *testing.T) {
 }
 
 func TestMockRepoSetRef(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	// Unconditional update (empty previousCommitHash).
 	if err := repo.SetRef("refs/heads/test", TestCommitA, ""); err != nil {
@@ -629,6 +670,7 @@ func TestMockRepoSetRef(t *testing.T) {
 }
 
 func TestMockRepoNotes(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	notes := repo.GetNotes(TestRequestsRef, TestCommitB)
 	if len(notes) == 0 {
@@ -651,6 +693,7 @@ func TestMockRepoNotes(t *testing.T) {
 }
 
 func TestMockRepoGetAllNotes(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	allNotes, err := repo.GetAllNotes(TestRequestsRef)
 	if err != nil {
@@ -665,6 +708,7 @@ func TestMockRepoGetAllNotes(t *testing.T) {
 }
 
 func TestMockRepoListNotedRevisions(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	revisions := repo.ListNotedRevisions(TestRequestsRef)
 	if len(revisions) == 0 {
@@ -673,6 +717,7 @@ func TestMockRepoListNotedRevisions(t *testing.T) {
 }
 
 func TestMockRepoRemotes(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	remotes, err := repo.Remotes()
 	if err != nil {
@@ -684,6 +729,7 @@ func TestMockRepoRemotes(t *testing.T) {
 }
 
 func TestMockRepoNoopOperations(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	if err := repo.Fetch("origin"); err != nil {
 		t.Fatal(err)
@@ -715,6 +761,7 @@ func TestMockRepoNoopOperations(t *testing.T) {
 }
 
 func TestMockRepoResolveLocalRefHEAD(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	hash, err := repo.GetCommitHash("HEAD")
 	if err != nil {
@@ -726,6 +773,7 @@ func TestMockRepoResolveLocalRefHEAD(t *testing.T) {
 }
 
 func TestMockRepoIsAncestorGetCommitError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Add a ref that points to a hash not in Commits, so resolveLocalRef
 	// succeeds (it's in Refs) but getCommit on the resolved hash fails.
@@ -737,6 +785,7 @@ func TestMockRepoIsAncestorGetCommitError(t *testing.T) {
 }
 
 func TestMockRepoMergeRefNonFFHeadResolveError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Set Head to a value that can resolve ref (it's valid) but then
 	// resolveLocalRef(r.Head) fails in non-ff path.
@@ -748,6 +797,7 @@ func TestMockRepoMergeRefNonFFHeadResolveError(t *testing.T) {
 }
 
 func TestMockRepoMergeRefNonFFGetCommitError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Create a ref whose hash resolves (it's in Refs) but whose resolved
 	// hash is NOT in Commits, so getCommit fails with "unable to find commit".
@@ -760,6 +810,7 @@ func TestMockRepoMergeRefNonFFGetCommitError(t *testing.T) {
 }
 
 func TestMockRepoRebaseRefWithRefNotInRefs(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// When ref is not in r.Refs, parentHash will be empty string.
 	// Head must resolve properly for getCommit to work.
@@ -771,6 +822,7 @@ func TestMockRepoRebaseRefWithRefNotInRefs(t *testing.T) {
 }
 
 func TestMockRepoListCommitsBetweenNotBlocked(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	// Use from=C, to=D. D's ancestors include B and C.
 	// IsAncestor(B, C) is false since B is not reachable from C.
@@ -808,6 +860,7 @@ func (f *failingTreeChild) Type() string                 { return "blob" }
 func (f *failingTreeChild) Store(_ Repo) (string, error) { return "", fmt.Errorf("store failed") }
 
 func TestMockRepoStoreTreeChildStoreError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	contents := map[string]TreeChild{
 		"bad.txt": &failingTreeChild{},
@@ -819,6 +872,7 @@ func TestMockRepoStoreTreeChildStoreError(t *testing.T) {
 }
 
 func TestMockRepoCreateCommitWithTreeStoreError(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest()
 	tree := NewTree(map[string]TreeChild{
 		"bad.txt": &failingTreeChild{},
@@ -835,6 +889,7 @@ func TestMockRepoCreateCommitWithTreeStoreError(t *testing.T) {
 }
 
 func TestMockRepoReadTreeNilTrees(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Trees field is nil initially (never stored anything)
 	repo.Trees = nil
@@ -848,6 +903,7 @@ func TestMockRepoReadTreeNilTrees(t *testing.T) {
 }
 
 func TestMockRepoReadTreeExistingKeyNotFound(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Initialize Trees but with a different key
 	repo.Trees = make(map[string]map[string]TreeChild)
@@ -859,6 +915,7 @@ func TestMockRepoReadTreeExistingKeyNotFound(t *testing.T) {
 }
 
 func TestMockRepoArchiveRefCreateCommitSuccess(t *testing.T) {
+	t.Parallel()
 	repo := NewMockRepoForTest().(*mockRepoForTest)
 	// Test archiving with archive already existing (both paths in ArchiveRef)
 	archive := "refs/devtools/archives/test"
