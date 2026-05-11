@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -19,6 +20,13 @@ var (
 	port      = webFlagSet.Uint("port", 0, "Web server port.")
 	outputDir = webFlagSet.String("output", "", "Static HTML output directory.")
 )
+
+// createFileFn is overridable in tests. The static-html error branches
+// require an open file whose subsequent Write fails — historically tested
+// with a symlink to Linux's /dev/full, which does not exist on Darwin or
+// Windows. Injection makes the WriteStyleSheet/RepoTemplate/etc. error
+// paths reachable on every platform.
+var createFileFn = os.Create
 
 func webGenerateStatic(repoDetails *web.RepoDetails) error {
 	var paths web.StaticPaths
@@ -37,39 +45,28 @@ func webGenerateStatic(repoDetails *web.RepoDetails) error {
 		return err
 	}
 
-	cssFile, err := os.Create(paths.Css())
-	if err != nil {
+	if err := writeFile(paths.Css(), web.WriteStyleSheet); err != nil {
 		return err
 	}
-	if err := web.WriteStyleSheet(cssFile); err != nil {
-		return err
-	}
-
-	repoFile, err := os.Create(paths.Repo())
-	if err != nil {
-		return err
-	}
-	if err := repoDetails.WriteRepoTemplate(paths, repoFile); err != nil {
+	if err := writeFile(paths.Repo(), func(w io.Writer) error {
+		return repoDetails.WriteRepoTemplate(paths, w)
+	}); err != nil {
 		return err
 	}
 
 	for idx, branch := range repoDetails.Branches {
 		idx := uint64(idx)
-		branchFile, err := os.Create(paths.Branch(idx))
-		if err != nil {
-			return err
-		}
-		if err := repoDetails.WriteBranchTemplate(idx, paths, branchFile); err != nil {
+		if err := writeFile(paths.Branch(idx), func(w io.Writer) error {
+			return repoDetails.WriteBranchTemplate(idx, paths, w)
+		}); err != nil {
 			return err
 		}
 
 		for _, reviews := range [][]review.Summary{branch.OpenReviews, branch.ClosedReviews} {
 			for _, review := range reviews {
-				reviewFile, err := os.Create(paths.Review(review.Revision))
-				if err != nil {
-					return err
-				}
-				if err := repoDetails.WriteReviewTemplate(review.Revision, paths, reviewFile); err != nil {
+				if err := writeFile(paths.Review(review.Revision), func(w io.Writer) error {
+					return repoDetails.WriteReviewTemplate(review.Revision, paths, w)
+				}); err != nil {
 					return err
 				}
 			}
@@ -77,6 +74,22 @@ func webGenerateStatic(repoDetails *web.RepoDetails) error {
 	}
 
 	return nil
+}
+
+// writeFile opens path via createFileFn, hands the writer to write, and
+// reports the first error among write or close. Surfacing Close() errors
+// is necessary because buffered data may fail to flush (e.g., ENOSPC).
+func writeFile(path string, write func(io.Writer) error) (err error) {
+	f, err := createFileFn(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	return write(f)
 }
 
 func webSetupHandlers(repoDetails *web.RepoDetails) *http.ServeMux {

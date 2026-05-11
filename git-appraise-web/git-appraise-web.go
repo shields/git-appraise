@@ -36,10 +36,15 @@ func (ServeMultiPaths) Review(review string) string {
 type reposMap map[string]*web.RepoDetails
 type Repos atomic.Pointer[reposMap]
 
+// getwdFn is overridable in tests; on Darwin os.Getwd returns the cached
+// path even after the cwd is removed, so the only portable way to exercise
+// the error branch is via injection.
+var getwdFn = os.Getwd
+
 func (oldRepos *Repos) Discover() error {
 	var newRepos = make(reposMap)
 
-	cwd, err := os.Getwd()
+	cwd, err := getwdFn()
 	if err != nil {
 		return err
 	}

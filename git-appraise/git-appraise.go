@@ -89,15 +89,21 @@ func run(w io.Writer, args []string, cwd string) error {
 	return subcommand.Run(repo, args[2:])
 }
 
+// getwdFn is overridable in tests to simulate os.Getwd failures portably:
+// removing the cwd does not make os.Getwd fail on Darwin (the kernel
+// returns the cached path), so tests cannot reproduce the error path
+// otherwise.
+var getwdFn = os.Getwd
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "help" {
 		printHelp(os.Stdout, os.Args)
 		return
 	}
-	cwd, err := os.Getwd()
+	cwd, err := getwdFn()
 	if err != nil {
-		fmt.Printf("Unable to get the current working directory: %q\n", err)
-		return
+		fmt.Fprintf(os.Stderr, "Unable to get the current working directory: %q\n", err)
+		os.Exit(1)
 	}
 	if err := run(os.Stdout, os.Args, cwd); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())

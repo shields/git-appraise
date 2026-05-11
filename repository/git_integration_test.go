@@ -2928,7 +2928,7 @@ func TestGitRepoPullNotesAndArchiveMergeNotesCorrupt(t *testing.T) {
 	// Add new notes on remote so the next fetch detects changes
 	addCommit(t, repo, "extra.txt", "extra\n", "extra commit")
 	gitRun(t, repo.Path, "push", "origin", "main")
-	newHash := gitRun(t, remoteDir, "rev-parse", "HEAD")
+	newHash := gitRun(t, remoteDir, "rev-parse", "refs/heads/main")
 	gitRun(t, remoteDir, "notes", "--ref", "refs/notes/devtools/reviews", "add", "-m", "another note", newHash)
 
 	// Corrupt the local notes ref by pointing it to a blob

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -182,19 +183,16 @@ func TestReposDiscoverWalkError(t *testing.T) {
 }
 
 func TestReposDiscoverGetwdError(t *testing.T) {
-	old, _ := os.Getwd()
-	tmpDir := t.TempDir()
-	subDir := tmpDir + "/vanishing"
-	os.Mkdir(subDir, 0755)
-	os.Chdir(subDir)
-	os.RemoveAll(subDir)
-	defer os.Chdir(old)
+	origGetwd := getwdFn
+	defer func() { getwdFn = origGetwd }()
+	getwdFn = func() (string, error) {
+		return "", errors.New("simulated getwd failure")
+	}
 
 	var repos Repos
 	m := make(reposMap)
 	repos.Store(&m)
-	err := repos.Discover()
-	if err == nil {
+	if err := repos.Discover(); err == nil {
 		t.Error("expected error when Getwd fails")
 	}
 }
@@ -474,8 +472,10 @@ func TestWebServeListenError(t *testing.T) {
 	defer os.Chdir(origDir)
 	os.Chdir(dir)
 
-	// Bind a port so webServe will fail with "address already in use"
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	// Bind a port so webServe will fail with "address already in use".
+	// Use the wildcard address — binding on 127.0.0.1:N does not conflict
+	// with webServe's 0.0.0.0:N listen on Darwin.
+	l, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatal(err)
 	}

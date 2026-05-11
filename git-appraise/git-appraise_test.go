@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -201,33 +202,38 @@ func TestMainSuccessfulRun(t *testing.T) {
 	buf.ReadFrom(r)
 }
 
+// TestMainGetwdError tests the os.Exit(1) path via subprocess.
 func TestMainGetwdError(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMainGetwdErrorHelper$")
+	cmd.Env = append(os.Environ(), "TEST_GETWD_ERROR=1")
+	cmd.Dir = t.TempDir()
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected non-zero exit code")
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError, got %T: %v", err, err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.ExitCode())
+	}
+	if !strings.Contains(string(out), "Unable to get the current working directory") {
+		t.Errorf("expected Getwd error message, got %q", string(out))
+	}
+}
+
+func TestMainGetwdErrorHelper(t *testing.T) {
+	if os.Getenv("TEST_GETWD_ERROR") != "1" {
+		return
+	}
+	getwdFn = func() (string, error) {
+		return "", errors.New("simulated getwd failure")
+	}
 	origArgs := os.Args
-	origDir, _ := os.Getwd()
-	defer func() {
-		os.Args = origArgs
-		os.Chdir(origDir)
-	}()
-
-	// Create a temp dir, chdir into it, then remove it to make Getwd fail
-	tmpDir := t.TempDir()
-	subDir := tmpDir + "/vanishing"
-	os.Mkdir(subDir, 0755)
-	os.Chdir(subDir)
-	os.RemoveAll(subDir)
-
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	defer func() { os.Args = origArgs }()
 	os.Args = []string{"git-appraise"}
 	main()
-	w.Close()
-	os.Stdout = old
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	if !strings.Contains(buf.String(), "Unable to get the current working directory") {
-		t.Errorf("expected Getwd error message, got %q", buf.String())
-	}
 }
 
 // TestMainRunErrorSubprocess tests the os.Exit(1) path via subprocess.

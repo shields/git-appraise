@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -3039,26 +3040,49 @@ func TestWebGenerateStaticReviewCreateError(t *testing.T) {
 	}
 }
 
+// readOnlyFile returns an *os.File opened RDONLY, so any subsequent
+// Write fails with EBADF (the underlying fd is not a write fd). Portable
+// substitute for the historical /dev/full ENOSPC trick (Linux-only).
+// Using a closed/removed temp file is unreliable because the kernel can
+// reuse a freed fd between Close and the subsequent Write, causing the
+// Write to silently target an unrelated file.
+func readOnlyFile(t *testing.T) *os.File {
+	t.Helper()
+	f, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+	return f
+}
+
+// failingCreate returns a createFileFn that hands out a read-only file (so
+// the next Write fails) when the basename matches failOn, and falls back
+// to os.Create otherwise.
+func failingCreate(t *testing.T, failOn string) func(string) (*os.File, error) {
+	return func(name string) (*os.File, error) {
+		if filepath.Base(name) == failOn {
+			return readOnlyFile(t), nil
+		}
+		return os.Create(name)
+	}
+}
+
 func TestWebGenerateStaticCssWriteError(t *testing.T) {
 	resetWebFlags()
 	defer resetWebFlags()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
+	origCreate := createFileFn
+	defer func() { createFileFn = origCreate }()
+
 	repo := repository.NewMockRepoForTest()
-	dir := t.TempDir()
-	outPath := dir + "/out"
-	if err := os.MkdirAll(outPath, 0755); err != nil {
-		t.Fatal(err)
-	}
-	// Create a symlink stylesheet.css -> /dev/full so os.Create succeeds
-	// but the subsequent write returns ENOSPC.
-	if err := os.Symlink("/dev/full", outPath+"/stylesheet.css"); err != nil {
-		t.Skip("cannot create symlink to /dev/full: " + err.Error())
-	}
-	*outputDir = outPath
+	*outputDir = t.TempDir() + "/out"
+	createFileFn = failingCreate(t, "stylesheet.css")
+
 	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
-		t.Error("expected error from WriteStyleSheet on /dev/full")
+		t.Error("expected error from WriteStyleSheet on read-only file")
 	}
 }
 
@@ -3067,20 +3091,16 @@ func TestWebGenerateStaticRepoWriteError(t *testing.T) {
 	defer resetWebFlags()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
+	origCreate := createFileFn
+	defer func() { createFileFn = origCreate }()
+
 	repo := repository.NewMockRepoForTest()
-	dir := t.TempDir()
-	outPath := dir + "/out"
-	if err := os.MkdirAll(outPath, 0755); err != nil {
-		t.Fatal(err)
-	}
-	// Make index.html a symlink to /dev/full so WriteRepoTemplate fails
-	if err := os.Symlink("/dev/full", outPath+"/index.html"); err != nil {
-		t.Skip("cannot create symlink to /dev/full: " + err.Error())
-	}
-	*outputDir = outPath
+	*outputDir = t.TempDir() + "/out"
+	createFileFn = failingCreate(t, "index.html")
+
 	repoDetails := web.NewRepoDetails(repo)
 	if err := webGenerateStatic(repoDetails); err == nil {
-		t.Error("expected error from WriteRepoTemplate on /dev/full")
+		t.Error("expected error from WriteRepoTemplate on read-only file")
 	}
 }
 
@@ -3089,10 +3109,11 @@ func TestWebGenerateStaticBranchWriteError(t *testing.T) {
 	defer resetWebFlags()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
+	origCreate := createFileFn
+	defer func() { createFileFn = origCreate }()
+
 	repo := repository.NewMockRepoForTest()
-	dir := t.TempDir()
-	outPath := dir + "/out"
-	*outputDir = outPath
+	*outputDir = t.TempDir() + "/out"
 	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
@@ -3100,15 +3121,10 @@ func TestWebGenerateStaticBranchWriteError(t *testing.T) {
 	if len(repoDetails.Branches) == 0 {
 		t.Skip("no branches in mock repo")
 	}
-	if err := os.MkdirAll(outPath, 0755); err != nil {
-		t.Fatal(err)
-	}
-	// Make branch_0.html a symlink to /dev/full so WriteBranchTemplate fails
-	if err := os.Symlink("/dev/full", outPath+"/branch_0.html"); err != nil {
-		t.Skip("cannot create symlink to /dev/full: " + err.Error())
-	}
+	createFileFn = failingCreate(t, "branch_0.html")
+
 	if err := webGenerateStatic(repoDetails); err == nil {
-		t.Error("expected error from WriteBranchTemplate on /dev/full")
+		t.Error("expected error from WriteBranchTemplate on read-only file")
 	}
 }
 
@@ -3117,10 +3133,11 @@ func TestWebGenerateStaticReviewWriteError(t *testing.T) {
 	defer resetWebFlags()
 	origDir, _ := os.Getwd()
 	defer os.Chdir(origDir)
+	origCreate := createFileFn
+	defer func() { createFileFn = origCreate }()
+
 	repo := repository.NewMockRepoForTest()
-	dir := t.TempDir()
-	outPath := dir + "/out"
-	*outputDir = outPath
+	*outputDir = t.TempDir() + "/out"
 	repoDetails := web.NewRepoDetails(repo)
 	if err := repoDetails.Update(); err != nil {
 		t.Fatal(err)
@@ -3145,15 +3162,10 @@ func TestWebGenerateStaticReviewWriteError(t *testing.T) {
 	if revision == "" {
 		t.Skip("no reviews found")
 	}
-	if err := os.MkdirAll(outPath, 0755); err != nil {
-		t.Fatal(err)
-	}
-	// Make review_{revision}.html a symlink to /dev/full so WriteReviewTemplate fails
-	if err := os.Symlink("/dev/full", outPath+"/review_"+revision+".html"); err != nil {
-		t.Skip("cannot create symlink to /dev/full: " + err.Error())
-	}
+	createFileFn = failingCreate(t, "review_"+revision+".html")
+
 	if err := webGenerateStatic(repoDetails); err == nil {
-		t.Error("expected error from WriteReviewTemplate on /dev/full")
+		t.Error("expected error from WriteReviewTemplate on read-only file")
 	}
 }
 
@@ -3230,9 +3242,10 @@ func TestWebCmdRunMethodWithPort(t *testing.T) {
 	resetWebFlags()
 	defer resetWebFlags()
 	repo := repository.NewMockRepoForTest()
-	// Bind a listener on a random port, then try to serve on the same port
-	// to trigger an "address already in use" error from ListenAndServe.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// Bind on wildcard so the conflict with webServe's ":N" listen is
+	// detected on macOS too — binding on 127.0.0.1:N does not conflict
+	// with 0.0.0.0:N on Darwin.
+	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatal(err)
 	}
