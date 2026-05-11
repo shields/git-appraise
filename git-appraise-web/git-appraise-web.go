@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 
 	"msrl.dev/git-appraise/commands/web"
 	"msrl.dev/git-appraise/repository"
@@ -152,18 +150,7 @@ func webServe() {
 			fmt.Fprintf(w, "ok")
 		})
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGUSR1)
-	go func() {
-		for {
-			select {
-			case sig := <-sigs:
-				if sig == syscall.SIGUSR1 {
-					repos.Discover()
-				}
-			}
-		}
-	}()
+	setupReloadOnSignal(&repos)
 
 	stylesheet, _, _ := strings.Cut(paths.Css(), "?")
 	repo, _, _ := strings.Cut(paths.Repo(), "?")
