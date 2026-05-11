@@ -41,9 +41,14 @@ func webGenerateStatic(repoDetails *web.RepoDetails) error {
 			return err
 		}
 	}
+	origCwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
 	if err := os.Chdir(*outputDir); err != nil {
 		return err
 	}
+	defer os.Chdir(origCwd)
 
 	if err := writeFile(paths.Css(), web.WriteStyleSheet); err != nil {
 		return err

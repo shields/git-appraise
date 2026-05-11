@@ -20,11 +20,13 @@ package repository
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"os"
 	"os/exec"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -62,8 +64,26 @@ var execGitCommand = func(cmd *exec.Cmd) error {
 }
 
 // storeObject is a test seam for injecting object-storage failures.
+//
+// On Windows, go-git's final tmp_obj_* -> objects/XX/YYYY rename can
+// transiently fail with "Access is denied" — typically because git.exe
+// from a preceding fetch or push hasn't fully released its handles on
+// objects/pack/, or antivirus is scanning the just-closed temp file.
+// See https://github.com/go-git/go-git/issues/55. Retry on permission
+// errors only, with backoff up to ~3 s.
 var storeObject = func(repo *GitRepo, obj plumbing.EncodedObject) (plumbing.Hash, error) {
-	return repo.gogit.Storer.SetEncodedObject(obj)
+	h, err := repo.gogit.Storer.SetEncodedObject(obj)
+	if err == nil || runtime.GOOS != "windows" || !errors.Is(err, os.ErrPermission) {
+		return h, err
+	}
+	for i := range 5 {
+		time.Sleep(time.Duration(100<<i) * time.Millisecond)
+		h, err = repo.gogit.Storer.SetEncodedObject(obj)
+		if err == nil || !errors.Is(err, os.ErrPermission) {
+			return h, err
+		}
+	}
+	return h, err
 }
 
 // gogitConfig is a test seam for injecting config read failures.
