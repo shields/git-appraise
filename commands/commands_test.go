@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -2930,6 +2931,9 @@ func TestWebGenerateStaticWithReviews(t *testing.T) {
 // --- webGenerateStatic with read-only dir to trigger os.Create errors ---
 
 func TestWebGenerateStaticReadOnlyDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only-dir permissions don't block file creation on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("skipping: root ignores file permissions")
 	}
