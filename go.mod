@@ -4,7 +4,8 @@ go 1.26
 
 require (
 	github.com/bluekeyes/go-gitdiff v0.8.1
-	github.com/gomarkdown/markdown v0.0.0-20260217112301-37c66b85d6ab
+	github.com/go-git/go-git/v5 v5.19.0
+	github.com/gomarkdown/markdown v0.0.0-20260417124207-7d523f7318df
 	github.com/microcosm-cc/bluemonday v1.0.27
 )
 
@@ -32,7 +33,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
-	github.com/go-git/go-git/v5 v5.19.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20251027170946-4849db3c2f7e // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
