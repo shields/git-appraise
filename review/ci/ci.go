@@ -33,7 +33,7 @@ const (
 	// StatusFailure is the status string representing that a build and/or test failed.
 	StatusFailure = "failure"
 
-	// FormatVersion defines the latest version of the request format supported by the tool.
+	// FormatVersion defines the latest version of the CI report format supported by the tool.
 	FormatVersion = 0
 )
 

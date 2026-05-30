@@ -287,6 +287,30 @@ func TestLocationCheckEndColumnTooLarge(t *testing.T) {
 	}
 }
 
+func TestLocationCheckStartColumnWithoutStartLine(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  &Range{StartColumn: 5},
+	}
+	if err := loc.Check(repo); err == nil {
+		t.Fatal("expected error for start column without a start line")
+	}
+}
+
+func TestLocationCheckEndColumnWithoutEndLine(t *testing.T) {
+	repo := repository.NewMockRepoForTest()
+	loc := &Location{
+		Commit: repository.TestCommitB,
+		Path:   "file.txt",
+		Range:  &Range{StartLine: 1, EndColumn: 5},
+	}
+	if err := loc.Check(repo); err == nil {
+		t.Fatal("expected error for end column without an end line")
+	}
+}
+
 func TestRangeSetInvalidEndPart(t *testing.T) {
 	r := &Range{}
 	if err := r.Set("5:abc"); err == nil {

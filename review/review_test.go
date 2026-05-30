@@ -2059,6 +2059,29 @@ func TestFindLastCommitTimestampNotLater(t *testing.T) {
 	}
 }
 
+func TestCommitTimeLater(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"6", "4", true},
+		{"4", "6", false},
+		{"5", "5", false},
+		// Differing-length integers must compare numerically, not
+		// lexicographically ("1000000000" < "999999999" as strings).
+		{"1000000000", "999999999", true},
+		{"999999999", "1000000000", false},
+		// Malformed values fall back to lexicographic comparison.
+		{"abc", "abd", false},
+		{"abd", "abc", true},
+	}
+	for _, c := range cases {
+		if got := commitTimeLater(c.a, c.b); got != c.want {
+			t.Errorf("commitTimeLater(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 // --- Error path tests using errorRepo ---
 
 func TestUnsortedListAllGetAllNotesRequestError(t *testing.T) {

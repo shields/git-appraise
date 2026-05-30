@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review/analyses"
@@ -287,10 +288,10 @@ func GetComments(repo repository.Repo, revision string) ([]CommentThread, error)
 	return c, nil
 }
 
-// GetSummary returns the summary of the code review specified by its revision
-// and the references which contain that reviews summary and comments.
+// GetSummaryViaRefs returns the summary of the code review specified by its
+// revision and the references which contain that review's requests and comments.
 //
-// If no review request exists, the returned review summary is nil.
+// If no review request exists, a non-nil error is returned.
 func GetSummaryViaRefs(repo repository.Repo, requestRef, commentRef, revision string) (*Summary, error) {
 	if err := repo.VerifyCommit(revision); err != nil {
 		return nil, fmt.Errorf("Could not find a commit named %q", revision)
@@ -318,7 +319,7 @@ func GetSummaryViaRefs(repo repository.Repo, requestRef, commentRef, revision st
 
 // GetSummary returns the summary of the specified code review.
 //
-// If no review request exists, the returned review summary is nil.
+// If no review request exists, a non-nil error is returned.
 func GetSummary(repo repository.Repo, revision string) (*Summary, error) {
 	return GetSummaryViaRefs(repo, request.Ref, comment.Ref, revision)
 }
@@ -348,7 +349,7 @@ func (r *Summary) IsOpen() bool {
 
 // Get returns the specified code review.
 //
-// If no review request exists, the returned review is nil.
+// If no review request exists, a non-nil error is returned.
 func Get(repo repository.Repo, revision string) (*Review, error) {
 	summary, err := GetSummary(repo, revision)
 	if err != nil {
@@ -533,6 +534,23 @@ func (r *Review) GetJSON() (string, error) {
 	return prettyPrintJSON(jsonBytes)
 }
 
+// commitTimeLater reports whether the commit time a is strictly later than b.
+//
+// Commit times are Unix-epoch second counts stored as strings. They are
+// compared numerically so that values of differing lengths (e.g. timestamps
+// from before September 2001) are ordered correctly rather than
+// lexicographically. If either value is not a valid integer, the comparison
+// falls back to a lexicographic one so that malformed data is handled the same
+// way it was historically.
+func commitTimeLater(a, b string) bool {
+	ai, aerr := strconv.ParseInt(a, 10, 64)
+	bi, berr := strconv.ParseInt(b, 10, 64)
+	if aerr != nil || berr != nil {
+		return a > b
+	}
+	return ai > bi
+}
+
 // findLastCommit returns the later (newest) commit from the union of the provided commit
 // and all of the commits that are referenced in the given comment threads.
 func (r *Review) findLastCommit(startingCommit, latestCommit string, commentThreads []CommentThread) string {
@@ -557,7 +575,7 @@ func (r *Review) findLastCommit(startingCommit, latestCommit string, commentThre
 		if err != nil {
 			return true
 		}
-		return ct > lt
+		return commitTimeLater(ct, lt)
 	}
 	updateLatest := func(commit string) {
 		if commit == "" {

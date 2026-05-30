@@ -34,7 +34,7 @@ const Ref = "refs/notes/devtools/discuss"
 // FormatVersion defines the latest version of the comment format supported by the tool.
 const FormatVersion = 0
 
-// ErrInvalidRange inidcates an error during parsing of a user-defined file
+// ErrInvalidRange indicates an error during parsing of a user-defined file
 // range
 var ErrInvalidRange = errors.New("invalid file location range. The required form is StartLine[+StartColumn][:EndLine[+EndColumn]]. The first line in a file is considered to be line 1")
 
@@ -57,6 +57,12 @@ type Location struct {
 
 // Check verifies that this location is valid in the provided
 // repository.
+//
+// A nil or all-zero Range is valid: it represents the entire file (see
+// Location.Range and parseRangePart, where line 0 means "the whole file").
+// Ordering of the range (start before end) is enforced by Range.Set when the
+// range is parsed from user input; Check only verifies that the referenced
+// lines and columns exist in the file.
 func (location *Location) Check(repo repository.Repo) error {
 	contents, err := repo.Show(location.Commit, location.Path)
 	if err != nil {
@@ -71,12 +77,18 @@ func (location *Location) Check(repo repository.Repo) error {
 			location.Range.StartLine,
 			location.Path)
 	}
-	if location.Range.StartColumn != 0 &&
-		location.Range.StartColumn > uint32(len(lines[location.Range.StartLine-1])) {
-		return fmt.Errorf("Line %d in %q is too short for column %d",
-			location.Range.StartLine,
-			location.Path,
-			location.Range.StartColumn)
+	if location.Range.StartColumn != 0 {
+		if location.Range.StartLine == 0 {
+			return fmt.Errorf("Column %d in %q is set without a start line",
+				location.Range.StartColumn,
+				location.Path)
+		}
+		if location.Range.StartColumn > uint32(len(lines[location.Range.StartLine-1])) {
+			return fmt.Errorf("Line %d in %q is too short for column %d",
+				location.Range.StartLine,
+				location.Path,
+				location.Range.StartColumn)
+		}
 	}
 	if location.Range.EndLine != 0 &&
 		location.Range.EndLine > uint32(len(lines)) {
@@ -84,12 +96,18 @@ func (location *Location) Check(repo repository.Repo) error {
 			location.Range.EndLine,
 			location.Path)
 	}
-	if location.Range.EndColumn != 0 &&
-		location.Range.EndColumn > uint32(len(lines[location.Range.EndLine-1])) {
-		return fmt.Errorf("End line %d in %q is too short for column %d",
-			location.Range.EndLine,
-			location.Path,
-			location.Range.EndColumn)
+	if location.Range.EndColumn != 0 {
+		if location.Range.EndLine == 0 {
+			return fmt.Errorf("Column %d in %q is set without an end line",
+				location.Range.EndColumn,
+				location.Path)
+		}
+		if location.Range.EndColumn > uint32(len(lines[location.Range.EndLine-1])) {
+			return fmt.Errorf("End line %d in %q is too short for column %d",
+				location.Range.EndLine,
+				location.Path,
+				location.Range.EndColumn)
+		}
 	}
 	return nil
 }
