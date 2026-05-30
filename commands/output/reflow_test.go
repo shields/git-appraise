@@ -56,14 +56,34 @@ func TestReflowSingleNewlineJoinsLines(t *testing.T) {
 }
 
 func TestReflowExactWidthBoundary(t *testing.T) {
-	// Reflow uses strict less-than (column+wordLen+1 < maxCol) so a word
-	// that would land exactly at the width wraps to the next line. This
-	// documents current behavior; the width acts as an exclusive bound.
+	// The width is an inclusive bound: a line that exactly fills the width is
+	// kept on one line (matching the way `fmt` fills up to the column).
 	input := "ab cd"
 	got := Reflow(input, "", 5)
-	want := "ab\ncd"
+	want := "ab cd"
 	if got != want {
 		t.Errorf("Reflow(%q, %q, 5) = %q, want %q", input, "", got, want)
+	}
+}
+
+func TestReflowDisplayWidth(t *testing.T) {
+	// The wide character 世 occupies two display columns but three bytes;
+	// wrapping is measured in display columns, so "世 x" (four columns) fits at
+	// width 4 rather than wrapping as it would under a byte-length measurement.
+	input := "世 x"
+	got := Reflow(input, "", 4)
+	want := "世 x"
+	if got != want {
+		t.Errorf("Reflow(%q, %q, 4) = %q, want %q", input, "", got, want)
+	}
+}
+
+func TestReflowInvalidUTF8(t *testing.T) {
+	// An invalid UTF-8 byte must be treated as a single byte rather than
+	// over-advancing and panicking with a slice-bounds error.
+	got := Reflow("\xff", "", 10)
+	if got != "\xff" {
+		t.Errorf("Reflow(invalid) = %q, want %q", got, "\xff")
 	}
 }
 

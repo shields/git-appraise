@@ -1,15 +1,22 @@
 package output
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
+)
 
 // Reflows the text `in` with `prefix` before each line, and each line having
-// maximum `width` characters (not including `prefix`). Two newlines indicate a
-// new paragraph
+// maximum `width` display columns (not including `prefix`). Lengths are measured
+// in display columns (via runewidth) rather than bytes so multibyte and
+// East-Asian-wide characters wrap correctly. Two newlines indicate a new
+// paragraph.
 func Reflow(in, prefix string, width int) string {
 	line := strings.Builder{}
 	wordStart := -1
 	wordEnd := 0
-	prefixLen := len(prefix)
+	prefixLen := runewidth.StringWidth(prefix)
 	maxCol := width - prefixLen
 	column := 0
 	const (
@@ -21,9 +28,9 @@ func Reflow(in, prefix string, width int) string {
 	state := normal
 
 	addWord := func() {
-		wordLen := wordEnd - wordStart        // excluding current space
-		wordFits := column+wordLen+1 < maxCol // including separating space
 		if wordStart >= 0 {
+			wordLen := runewidth.StringWidth(in[wordStart:wordEnd]) // excluding current space
+			wordFits := column+wordLen+1 <= maxCol                  // including separating space
 			if column == 0 || wordFits {
 				if column == 0 {
 					line.WriteString(prefix)
@@ -71,7 +78,12 @@ func Reflow(in, prefix string, width int) string {
 			if wordStart < 0 {
 				wordStart = i
 			}
-			wordEnd = i + 1
+			// Advance by the rune's actual byte length. DecodeRuneInString
+			// reports a size of 1 for an invalid byte (where utf8.RuneLen of the
+			// resulting RuneError would be 3), so wordEnd never runs past the
+			// end of the string.
+			_, size := utf8.DecodeRuneInString(in[i:])
+			wordEnd = i + size
 			state = normal
 		}
 	}

@@ -6,6 +6,7 @@ require (
 	github.com/bluekeyes/go-gitdiff v0.8.1
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/gomarkdown/markdown v0.0.0-20260417124207-7d523f7318df
+	github.com/mattn/go-runewidth v0.0.23
 	github.com/microcosm-cc/bluemonday v1.0.27
 )
 
@@ -56,7 +57,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mattn/go-tty v0.0.7 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
