@@ -103,7 +103,18 @@ type commentsByTimestamp []*comment.Comment
 func (cs commentsByTimestamp) Len() int      { return len(cs) }
 func (cs commentsByTimestamp) Swap(i, j int) { cs[i], cs[j] = cs[j], cs[i] }
 func (cs commentsByTimestamp) Less(i, j int) bool {
-	return cs[i].Timestamp < cs[j].Timestamp
+	if timestampLess(cs[i].Timestamp, cs[j].Timestamp) {
+		return true
+	}
+	if timestampLess(cs[j].Timestamp, cs[i].Timestamp) {
+		return false
+	}
+	// Equal timestamps: break ties by content hash. Edits are collected during
+	// map iteration, so without a tie-breaker their order would be
+	// nondeterministic across runs.
+	hi, _ := cs[i].Hash()
+	hj, _ := cs[j].Hash()
+	return hi < hj
 }
 
 type byTimestamp []CommentThread
@@ -112,7 +123,16 @@ type byTimestamp []CommentThread
 func (threads byTimestamp) Len() int      { return len(threads) }
 func (threads byTimestamp) Swap(i, j int) { threads[i], threads[j] = threads[j], threads[i] }
 func (threads byTimestamp) Less(i, j int) bool {
-	return threads[i].Comment.Timestamp < threads[j].Comment.Timestamp
+	if timestampLess(threads[i].Comment.Timestamp, threads[j].Comment.Timestamp) {
+		return true
+	}
+	if timestampLess(threads[j].Comment.Timestamp, threads[i].Comment.Timestamp) {
+		return false
+	}
+	// Equal timestamps: break ties by hash so the order is deterministic;
+	// otherwise sort.Stable would preserve the nondeterministic map-iteration
+	// order in which buildCommentThreads collected the threads.
+	return threads[i].Hash < threads[j].Hash
 }
 
 type requestsByTimestamp []request.Request
@@ -123,7 +143,7 @@ func (requests requestsByTimestamp) Swap(i, j int) {
 	requests[i], requests[j] = requests[j], requests[i]
 }
 func (requests requestsByTimestamp) Less(i, j int) bool {
-	return requests[i].Timestamp < requests[j].Timestamp
+	return timestampLess(requests[i].Timestamp, requests[j].Timestamp)
 }
 
 type summariesWithNewestRequestsFirst []Summary
@@ -134,7 +154,7 @@ func (summaries summariesWithNewestRequestsFirst) Swap(i, j int) {
 	summaries[i], summaries[j] = summaries[j], summaries[i]
 }
 func (summaries summariesWithNewestRequestsFirst) Less(i, j int) bool {
-	return summaries[i].Request.Timestamp > summaries[j].Request.Timestamp
+	return timestampLess(summaries[j].Request.Timestamp, summaries[i].Request.Timestamp)
 }
 
 // updateThreadsStatus calculates the aggregate status of a sequence of comment threads.
@@ -244,6 +264,15 @@ func buildCommentThreads(commentsByHash map[string]comment.Comment) []CommentThr
 		} else {
 			parent, ok := threadsByHash[thread.Comment.Parent]
 			if ok {
+				// A reply may target an edit (a comment with Original set).
+				// Edits are folded into their original's Edits and never placed
+				// in the tree, so resolve to the original comment; otherwise the
+				// reply (and its descendants) would be silently dropped.
+				if parent.Comment.Original != "" {
+					if original, ok := threadsByHash[parent.Comment.Original]; ok {
+						parent = original
+					}
+				}
 				parent.Children = append(parent.Children, thread)
 			}
 		}
@@ -534,21 +563,35 @@ func (r *Review) GetJSON() (string, error) {
 	return prettyPrintJSON(jsonBytes)
 }
 
-// commitTimeLater reports whether the commit time a is strictly later than b.
+// timestampLess reports whether timestamp a is strictly earlier than b.
 //
-// Commit times are Unix-epoch second counts stored as strings. They are
-// compared numerically so that values of differing lengths (e.g. timestamps
-// from before September 2001) are ordered correctly rather than
-// lexicographically. If either value is not a valid integer, the comparison
-// falls back to a lexicographic one so that malformed data is handled the same
-// way it was historically.
-func commitTimeLater(a, b string) bool {
+// Timestamps are Unix-epoch second counts stored as strings. They are compared
+// numerically so that values of differing lengths (e.g. timestamps from before
+// September 2001) are ordered correctly rather than lexicographically. If
+// either value is not a valid integer, the comparison falls back to a
+// lexicographic one so that malformed data is handled the same way it was
+// historically.
+func timestampLess(a, b string) bool {
 	ai, aerr := strconv.ParseInt(a, 10, 64)
 	bi, berr := strconv.ParseInt(b, 10, 64)
-	if aerr != nil || berr != nil {
-		return a > b
+	switch {
+	case aerr == nil && berr == nil:
+		return ai < bi
+	case aerr == nil:
+		// Parseable timestamps sort before unparseable ones (and vice versa).
+		// Ordering them consistently keeps the comparison transitive — a strict
+		// weak ordering — which sort.Stable requires even with malformed data.
+		return true
+	case berr == nil:
+		return false
+	default:
+		return a < b
 	}
-	return ai > bi
+}
+
+// commitTimeLater reports whether the commit time a is strictly later than b.
+func commitTimeLater(a, b string) bool {
+	return timestampLess(b, a)
 }
 
 // findLastCommit returns the later (newest) commit from the union of the provided commit

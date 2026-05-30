@@ -127,7 +127,7 @@ func TestCommentSorting(t *testing.T) {
 			Description: "Fourth",
 		},
 		&comment.Comment{
-			Timestamp:   "012400",
+			Timestamp:   "012401",
 			Description: "Fifth",
 		},
 		&comment.Comment{
@@ -163,7 +163,7 @@ func TestThreadSorting(t *testing.T) {
 		},
 		CommentThread{
 			Comment: comment.Comment{
-				Timestamp:   "012400",
+				Timestamp:   "012401",
 				Description: "Fifth",
 			},
 		},
@@ -2074,11 +2074,110 @@ func TestCommitTimeLater(t *testing.T) {
 		// Malformed values fall back to lexicographic comparison.
 		{"abc", "abd", false},
 		{"abd", "abc", true},
+		// A parseable timestamp sorts before an unparseable one, so an
+		// unparseable value is treated as "later" than a valid one and vice
+		// versa (keeps the ordering transitive for sort.Stable).
+		{"garbage", "100", true},
+		{"100", "garbage", false},
 	}
 	for _, c := range cases {
 		if got := commitTimeLater(c.a, c.b); got != c.want {
 			t.Errorf("commitTimeLater(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
 		}
+	}
+}
+
+func TestByTimestampOrdersByTimestampThenHash(t *testing.T) {
+	threads := []CommentThread{
+		{Hash: "ccc", Comment: comment.Comment{Timestamp: "1000000002"}},
+		{Hash: "bbb", Comment: comment.Comment{Timestamp: "1000000000"}},
+		{Hash: "aaa", Comment: comment.Comment{Timestamp: "1000000000"}},
+	}
+	sort.Stable(byTimestamp(threads))
+	// Earliest timestamp first; ties (aaa and bbb share a timestamp) are broken
+	// by hash so the order is deterministic regardless of the input order.
+	want := []string{"aaa", "bbb", "ccc"}
+	for i, w := range want {
+		if threads[i].Hash != w {
+			t.Errorf("position %d = %q, want %q (full order: %v)", i, threads[i].Hash, w, threads)
+		}
+	}
+}
+
+func TestCommentsByTimestampSortDeterministic(t *testing.T) {
+	early := &comment.Comment{Timestamp: "1000000000", Description: "early"}
+	a := &comment.Comment{Timestamp: "1000000001", Description: "a"}
+	b := &comment.Comment{Timestamp: "1000000001", Description: "b"} // ties with a
+	cs := commentsByTimestamp{b, early, a}
+	sort.Stable(cs)
+	if cs[0] != early {
+		t.Errorf("expected the earliest comment first, got %q", cs[0].Description)
+	}
+	// a and b share a timestamp; the tie-break must produce the same order
+	// regardless of the input order.
+	cs2 := commentsByTimestamp{a, b, early}
+	sort.Stable(cs2)
+	for i := range cs {
+		if cs[i] != cs2[i] {
+			t.Errorf("sort is nondeterministic at position %d: %q vs %q", i, cs[i].Description, cs2[i].Description)
+		}
+	}
+}
+
+func TestBuildCommentThreadsReplyToEdit(t *testing.T) {
+	// A reply whose parent is an edit (a comment with Original set) must attach
+	// to the original comment's thread rather than being silently dropped.
+	original := comment.Comment{Timestamp: "1000000000", Description: "original"}
+	originalHash, err := original.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit := comment.Comment{Timestamp: "1000000001", Original: originalHash, Description: "edit"}
+	editHash, err := edit.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply := comment.Comment{Timestamp: "1000000002", Parent: editHash, Description: "reply to edit"}
+	replyHash, err := reply.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	threads := buildCommentThreads(map[string]comment.Comment{
+		originalHash: original,
+		editHash:     edit,
+		replyHash:    reply,
+	})
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 root thread, got %d: %v", len(threads), threads)
+	}
+	if len(threads[0].Children) != 1 {
+		t.Fatalf("expected the reply-to-edit to attach to the original (1 child), got %d", len(threads[0].Children))
+	}
+	if got := threads[0].Children[0].Comment.Description; got != "reply to edit" {
+		t.Errorf("unexpected child comment %q, want %q", got, "reply to edit")
+	}
+}
+
+func TestBuildCommentThreadsReplyToEditWithMissingOriginal(t *testing.T) {
+	// An edit whose Original is absent from the set, plus a reply targeting that
+	// edit: the edit is never placed in the tree (its original is missing), so
+	// there is no thread to attach the reply to. This must not panic.
+	edit := comment.Comment{Timestamp: "1000000001", Original: "missinghash", Description: "edit"}
+	editHash, err := edit.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply := comment.Comment{Timestamp: "1000000002", Parent: editHash, Description: "reply"}
+	replyHash, err := reply.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	threads := buildCommentThreads(map[string]comment.Comment{
+		editHash:  edit,
+		replyHash: reply,
+	})
+	if len(threads) != 0 {
+		t.Fatalf("expected no root threads, got %d: %v", len(threads), threads)
 	}
 }
 
