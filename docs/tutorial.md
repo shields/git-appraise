@@ -254,7 +254,7 @@ git appraise show 1e6eb14c8014
     comment: 4034c60e6ed6f24b01e9a581087d1ab86d376b81
       author: ojarjur@google.com
       time:   Fri Dec 18 11:02:45 PST 2015
-      status: fyi
+      status: lgtm
 ```
 
 ## Submitting the change
