@@ -43,7 +43,7 @@ func abandonReview(repo repository.Repo, args []string) error {
 	var r *review.Review
 	var err error
 	if len(args) > 1 {
-		return errors.New("Only abandon a single review is supported.")
+		return errors.New("Only abandoning a single review is supported.")
 	}
 
 	if len(args) == 1 {

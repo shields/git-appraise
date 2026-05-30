@@ -134,10 +134,8 @@ var webCmd = &Command{
 	Usage: usage,
 	RunMethod: func(repo repository.Repo, args []string) error {
 		webFlagSet.Parse(args)
-		args = webFlagSet.Args()
 		repoDetails := web.NewRepoDetails(repo)
 		if *outputDir != "" {
-
 			if err := webGenerateStatic(repoDetails); err != nil {
 				return err
 			}

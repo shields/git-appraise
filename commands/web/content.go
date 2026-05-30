@@ -41,6 +41,10 @@ var (
 	review_html string
 )
 
+// ugcPolicy is built once: bluemonday.UGCPolicy compiles many regexps, and
+// the resulting policy is read-only and safe for concurrent use.
+var ugcPolicy = bluemonday.UGCPolicy()
+
 func checkStringLooksLikeHash(s string) error {
 	if len(s) > maxHashLength {
 		return errors.New("Invalid hash parameter")
@@ -82,6 +86,12 @@ func (StaticPaths) Review(review string) string {
 	return fmt.Sprintf("review_%s.html", review)
 }
 
+// mdToHTML renders markdown to HTML and runs it through bluemonday so the
+// result is safe to embed verbatim. It deliberately returns []byte rather
+// than template.HTML: templates never call this directly. The "mdToHTML"
+// template func (see ServeTemplate's FuncMap) wraps the output in
+// template.HTML, marking it pre-sanitized so html/template emits it without
+// re-escaping.
 func mdToHTML(md []byte) []byte {
 	// create markdown parser with extensions
 	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
@@ -94,9 +104,7 @@ func mdToHTML(md []byte) []byte {
 	renderer := html.NewRenderer(opts)
 
 	maybeUnsafeHTML := markdown.Render(doc, renderer)
-	html := bluemonday.UGCPolicy().SanitizeBytes(maybeUnsafeHTML)
-
-	return html
+	return ugcPolicy.SanitizeBytes(maybeUnsafeHTML)
 }
 
 func ServeTemplate(v any, p Paths, w io.Writer, name string, templ string) error {
@@ -191,7 +199,7 @@ func (repoDetails *RepoDetails) WriteRepoTemplate(p Paths, w io.Writer) error {
 }
 
 // Shows reviews for a given branch
-// The branch to summarize is given by the 'repo' URL parameter.
+// The branch to summarize is given by the 'branch' URL parameter.
 func (repoDetails *RepoDetails) ServeBranchTemplate(w http.ResponseWriter, r *http.Request) {
 	repoDetails.ServeBranchTemplateWith(ServePaths{}, w, r)
 }
@@ -207,7 +215,7 @@ func (repoDetails *RepoDetails) ServeBranchTemplateWith(p Paths, w http.Response
 		return
 	}
 	branchNum, err := strconv.ParseUint(branchParam, 10, 32)
-	if err != nil || len(repoDetails.Branches) <= int(branchNum) {
+	if err != nil || uint64(len(repoDetails.Branches)) <= branchNum {
 		ServeErrorTemplate(errors.New("Bad branch specified"), http.StatusBadRequest, w)
 		return
 	}
@@ -364,5 +372,4 @@ func (repoDetails *RepoDetails) WriteReviewTemplate(reviewRev string, p Paths, w
 // ServeEntryPointRedirect writes the main redirect response to the given writer.
 func (repoDetails *RepoDetails) ServeEntryPointRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/repo.html", http.StatusTemporaryRedirect)
-	return
 }

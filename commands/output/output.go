@@ -327,11 +327,11 @@ func PrintInlineComments(r *review.Review, diffArgs ...string) error {
 				fmt.Printf("%s%s\n", line.Op.String(), strings.Trim(line.Line, "\n"))
 
 				if line.Op == repository.OpContext || line.Op == repository.OpAdd {
-					if rhs-1 >= 0 {
-						for _, thread := range lineThreads[file.NewName][uint32(rhs-1)] {
-							indent := strings.Repeat(" ", 2*digits+1)
-							showSubThread(r.Repo, thread, indent+"| ")
-						}
+					// rhs was just incremented for this line, so rhs-1 is the
+					// line number that was printed.
+					for _, thread := range lineThreads[file.NewName][uint32(rhs-1)] {
+						indent := strings.Repeat(" ", 2*digits+1)
+						showSubThread(r.Repo, thread, indent+"| ")
 					}
 				}
 				prevLine = rhs

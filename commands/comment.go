@@ -65,7 +65,7 @@ func commentHashExists(hashToFind string, threads []review.CommentThread) bool {
 	return false
 }
 
-func validateArgs(repo repository.Repo, args []string, threads []review.CommentThread) error {
+func validateArgs(repo repository.Repo, threads []review.CommentThread) error {
 	if *commentLgtm && *commentNmw {
 		return errors.New("You cannot combine the flags -lgtm and -nmw.")
 	}
@@ -151,7 +151,7 @@ func commentOnReview(repo repository.Repo, args []string) error {
 		return errors.New("There is no matching review.")
 	}
 
-	if err := validateArgs(repo, args, r.Comments); err != nil {
+	if err := validateArgs(repo, r.Comments); err != nil {
 		return err
 	}
 
@@ -191,7 +191,7 @@ func commentOnPath(repo repository.Repo, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateArgs(repo, args, commentThreads); err != nil {
+	if err := validateArgs(repo, commentThreads); err != nil {
 		return err
 	}
 

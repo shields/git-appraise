@@ -63,6 +63,41 @@ func TestParseDescriptionEmpty(t *testing.T) {
 	}
 }
 
+func TestParseDescriptionCRLF(t *testing.T) {
+	// Windows line endings must not leak a trailing carriage return into the
+	// parsed title and subtitle.
+	title, subtitle, desc := ParseDescription("# My Project\r\n## A subtitle\r\nBody text.\r\n")
+	if title != "My Project" {
+		t.Errorf("title = %q, want %q", title, "My Project")
+	}
+	if subtitle != "A subtitle" {
+		t.Errorf("subtitle = %q, want %q", subtitle, "A subtitle")
+	}
+	if !strings.Contains(desc, "Body text") {
+		t.Errorf("desc = %q, want to contain 'Body text'", desc)
+	}
+}
+
+func TestParseDescriptionNoTrailingNewline(t *testing.T) {
+	// A file containing only a title (no trailing newline) still parses the
+	// title rather than treating it as body text.
+	title, subtitle, desc := ParseDescription("# Title")
+	if title != "Title" {
+		t.Errorf("title = %q, want %q", title, "Title")
+	}
+	if subtitle != "" {
+		t.Errorf("subtitle = %q, want empty", subtitle)
+	}
+	if desc != "" {
+		t.Errorf("desc = %q, want empty", desc)
+	}
+
+	title, subtitle, desc = ParseDescription("# Title\n## Sub")
+	if title != "Title" || subtitle != "Sub" || desc != "" {
+		t.Errorf("got title=%q subtitle=%q desc=%q, want 'Title'/'Sub'/''", title, subtitle, desc)
+	}
+}
+
 // --- BranchList sort interface tests ---
 
 func TestBranchListSort(t *testing.T) {

@@ -799,7 +799,7 @@ func TestValidateArgsLgtmAndNmw(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
 	*commentLgtm = true
 	*commentNmw = true
-	if err := validateArgs(repo, nil, nil); err == nil {
+	if err := validateArgs(repo, nil); err == nil {
 		t.Error("expected error when both lgtm and nmw are set")
 	}
 }
@@ -810,7 +810,7 @@ func TestValidateArgsParentNotFound(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
 	*commentParent = "nonexistent"
 	*commentMessage = "msg"
-	if err := validateArgs(repo, nil, nil); err == nil {
+	if err := validateArgs(repo, nil); err == nil {
 		t.Error("expected error for non-matching parent comment")
 	}
 }
@@ -821,7 +821,7 @@ func TestValidateArgsWithMessageFile(t *testing.T) {
 	repo := repository.NewMockRepoForTest()
 	f := writeTestMessageFile(t, "comment from file")
 	*commentMessageFile = f
-	if err := validateArgs(repo, nil, nil); err != nil {
+	if err := validateArgs(repo, nil); err != nil {
 		t.Fatal(err)
 	}
 	if *commentMessage != "comment from file" {
@@ -834,7 +834,7 @@ func TestValidateArgsBadMessageFile(t *testing.T) {
 	defer resetCommentFlags()
 	repo := repository.NewMockRepoForTest()
 	*commentMessageFile = "/nonexistent/path/file.txt"
-	if err := validateArgs(repo, nil, nil); err == nil {
+	if err := validateArgs(repo, nil); err == nil {
 		t.Error("expected error for nonexistent message file")
 	}
 }
@@ -843,7 +843,7 @@ func TestValidateArgsEditorError(t *testing.T) {
 	resetCommentFlags()
 	defer resetCommentFlags()
 	repo := errEditorRepo{repository.NewMockRepoForTest()}
-	if err := validateArgs(repo, nil, nil); err == nil {
+	if err := validateArgs(repo, nil); err == nil {
 		t.Error("expected error when editor fails")
 	}
 }

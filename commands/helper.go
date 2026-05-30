@@ -13,7 +13,7 @@ func GetDate(timestamp string) (*time.Time, error) {
 	gitCommiterDate := os.Getenv("GIT_COMMITTER_DATE")
 	layouts := [...]string{time.RFC1123Z, time.RFC3339,
 		"2006-01-02 15:04:05", "2006.01.02T15:04:05",
-		"2005.04.07 15:04:05", "01/02/2006T15:04:05",
+		"2006.01.02 15:04:05", "01/02/2006T15:04:05",
 		"01/02/2006 15:04:05", "02.01.2006T15:04:05",
 		"02.01.2006 15:04:05",
 	}
@@ -44,8 +44,6 @@ func GetDate(timestamp string) (*time.Time, error) {
 			date, err = time.Parse(layout, timestampStr)
 			if err == nil {
 				break
-			} else {
-				fmt.Println(err)
 			}
 		}
 		if err != nil {

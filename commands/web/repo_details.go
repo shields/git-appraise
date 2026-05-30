@@ -115,7 +115,7 @@ func (reviewIndex *ReviewIndex) GetNext(repoDetails *RepoDetails) *ReviewIndex {
 	return nil
 }
 
-var repoDescriptionRe = regexp.MustCompile(`(# (.*)\n)?(## (.*)\n)?((?s).*)`)
+var repoDescriptionRe = regexp.MustCompile(`(# ([^\r\n]*)(?:\r?\n|$))?(## ([^\r\n]*)(?:\r?\n|$))?((?s).*)`)
 
 const descriptionPath = "README.md"
 
@@ -137,7 +137,7 @@ func (repoDetails *RepoDetails) UpdateRepoDescription() {
 
 	description, err := repoDetails.Repo.Show("HEAD", descriptionPath)
 	if err == nil {
-		repoDetails.Title, repoDetails.Subtitle, repoDetails.Description = ParseDescription(string(description))
+		repoDetails.Title, repoDetails.Subtitle, repoDetails.Description = ParseDescription(description)
 	}
 	if repoDetails.Title == "" {
 		repoPath := repoDetails.Repo.GetPath()

@@ -48,7 +48,7 @@ func submitReview(repo repository.Repo, args []string) error {
 	var r *review.Review
 	var err error
 	if len(args) > 1 {
-		return errors.New("Only accepting a single review is supported.")
+		return errors.New("Only submitting a single review is supported.")
 	}
 	if len(args) == 1 {
 		r, err = review.Get(repo, args[0])
