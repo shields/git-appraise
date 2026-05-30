@@ -54,16 +54,44 @@ func (oldRepos *Repos) Discover() error {
 		if info.IsDir() {
 			// filepath.Rel cannot fail here: path comes from Walk(cwd, ...)
 			// so it is always relative to cwd.
-			path, _ = filepath.Rel(cwd, path)
-			gitRepo, err := repository.NewGitRepo(path)
+			relPath, _ := filepath.Rel(cwd, path)
+			gitRepo, err := repository.NewGitRepo(relPath)
 			if err != nil {
 				return nil
 			}
 			repoDetails := web.NewRepoDetails(gitRepo)
 			if err := repoDetails.Update(); err != nil {
-				return nil
+				// This directory is a git repo, just an unusable one; never
+				// descend into it (including its .git directory).
+				return filepath.SkipDir
 			}
-			newRepos[path] = repoDetails
+			// Key the map and the URL-facing Path by the same cwd-relative
+			// name, normalized to forward slashes so the rendered URLs and
+			// the /{repo}/... routes match on every platform. NewRepoDetails
+			// derives Path from the repo's absolute filesystem root, which
+			// (a) leaks the server's directory layout in the rendered links
+			// and (b) never matches this map key, so the repos.html links
+			// would not route back to the entry.
+			//
+			// The routes registered in webServe use a single {repo} path
+			// segment, so the key must itself be a single segment. When cwd is
+			// a repo, relPath is "." (which HTTP clients normalize away); use
+			// the directory's base name instead so the entry stays reachable.
+			// Repos nested more than one level below cwd (relPath containing a
+			// slash) are intentionally left keyed by their relative path: the
+			// suffix-based /{repo}/repo.html scheme cannot address them, and
+			// inventing a flattened key risks colliding with a real top-level
+			// repo, so multi-level layouts are an unsupported deployment.
+			urlPath := filepath.ToSlash(relPath)
+			if urlPath == "." {
+				urlPath = filepath.Base(cwd)
+			}
+			// filepath.Base returns "/" at the filesystem root; strip any
+			// leading slash so the rendered link is a relative "repo.html"
+			// path rather than a protocol-relative "//repo.html" URL.
+			urlPath = strings.TrimPrefix(urlPath, "/")
+			repoDetails.Path = urlPath
+			newRepos[urlPath] = repoDetails
 			return filepath.SkipDir
 		}
 		return nil
@@ -135,7 +163,6 @@ func (repos *Repos) ServeReposTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (repos *Repos) ServeEntryPointRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/repos.html", http.StatusTemporaryRedirect)
-	return
 }
 
 func webServe() {

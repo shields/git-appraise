@@ -662,6 +662,12 @@ func (r *mockRepoForTest) SetRef(ref, newCommitHash, previousCommitHash string) 
 // GetNotes reads the notes from the given ref that annotate the given revision.
 func (r *mockRepoForTest) GetNotes(notesRef, revision string) []Note {
 	notesText := r.Notes[notesRef][revision]
+	// Mirror the real GetNotes: a revision with no notes yields no Note
+	// values (nil), rather than a single empty one.
+	notesText = strings.TrimRight(notesText, "\n")
+	if notesText == "" {
+		return nil
+	}
 	var notes []Note
 	for line := range strings.SplitSeq(notesText, "\n") {
 		notes = append(notes, Note(line))
@@ -684,8 +690,18 @@ func (r *mockRepoForTest) GetAllNotes(notesRef string) (map[string][]Note, error
 
 // AppendNote appends a note to a revision under the given ref.
 func (r *mockRepoForTest) AppendNote(ref, revision string, note Note) error {
-	existingNotes := r.Notes[ref][revision]
-	newNotes := existingNotes + "\n" + string(note)
+	if r.Notes == nil {
+		r.Notes = make(map[string]map[string]string)
+	}
+	if r.Notes[ref] == nil {
+		r.Notes[ref] = make(map[string]string)
+	}
+	// Mirror the real implementation: notes are newline-separated with no
+	// leading blank line for the first note.
+	newNotes := string(note)
+	if existing := strings.TrimRight(r.Notes[ref][revision], "\n"); existing != "" {
+		newNotes = existing + "\n" + newNotes
+	}
 	r.Notes[ref][revision] = newNotes
 	return nil
 }

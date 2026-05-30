@@ -46,7 +46,11 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	// Strip the variables that point git at a specific repository/index so a
+	// leaked GIT_DIR/GIT_INDEX_FILE (e.g. when the test binary runs inside a
+	// git hook) cannot make these commands operate on the ambient repository
+	// instead of the test's temporary directory.
+	cmd.Env = append(envWithout(gitLocationEnvVars...),
 		"GIT_AUTHOR_NAME=Test",
 		"GIT_AUTHOR_EMAIL=test@example.com",
 		"GIT_COMMITTER_NAME=Test",

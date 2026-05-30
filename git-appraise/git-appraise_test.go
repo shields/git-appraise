@@ -11,31 +11,43 @@ import (
 	"msrl.dev/git-appraise/commands"
 )
 
+// gitEnv returns the process environment with all GIT_* variables removed. Git
+// exports GIT_DIR, GIT_INDEX_FILE, GIT_PREFIX, etc. to the hooks it invokes; if
+// these tests run inside a pre-commit hook (e.g. via lefthook) those variables
+// would otherwise leak into the child git processes below and make them operate
+// on the outer repository instead of each test's temporary directory. Scrubbing
+// them keeps every command scoped to its intended -C directory.
+func gitEnv() []string {
+	env := os.Environ()
+	cleaned := make([]string, 0, len(env))
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "GIT_") {
+			cleaned = append(cleaned, kv)
+		}
+	}
+	return cleaned
+}
+
+func runGit(t *testing.T, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Env = gitEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+	}
+}
+
 func setupTestGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, args := range [][]string{
-		{"git", "init", dir},
-		{"git", "-C", dir, "config", "user.email", "test@test.com"},
-		{"git", "-C", dir, "config", "user.name", "Test"},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", err, out)
-		}
-	}
+	runGit(t, "init", dir)
+	runGit(t, "-C", dir, "config", "user.email", "test@test.com")
+	runGit(t, "-C", dir, "config", "user.name", "Test")
 	if err := os.WriteFile(dir+"/README.md", []byte("test repo\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{
-		{"git", "-C", dir, "add", "."},
-		{"git", "-C", dir, "commit", "-m", "initial"},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", err, out)
-		}
-	}
+	runGit(t, "-C", dir, "add", ".")
+	runGit(t, "-C", dir, "commit", "-m", "initial")
 	return dir
 }
 
@@ -205,7 +217,7 @@ func TestMainSuccessfulRun(t *testing.T) {
 // TestMainGetwdError tests the os.Exit(1) path via subprocess.
 func TestMainGetwdError(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run=^TestMainGetwdErrorHelper$")
-	cmd.Env = append(os.Environ(), "TEST_GETWD_ERROR=1")
+	cmd.Env = append(gitEnv(), "TEST_GETWD_ERROR=1")
 	cmd.Dir = t.TempDir()
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -239,7 +251,7 @@ func TestMainGetwdErrorHelper(t *testing.T) {
 // TestMainRunErrorSubprocess tests the os.Exit(1) path via subprocess.
 func TestMainRunErrorSubprocess(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run=^TestMainRunErrorHelper$")
-	cmd.Env = append(os.Environ(), "TEST_MAIN_RUN_ERROR=1")
+	cmd.Env = append(gitEnv(), "TEST_MAIN_RUN_ERROR=1")
 	cmd.Dir = t.TempDir()
 	err := cmd.Run()
 	if err == nil {

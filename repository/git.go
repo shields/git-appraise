@@ -120,10 +120,43 @@ type refIter interface {
 	ForEach(func(*plumbing.Reference) error) error
 }
 
+// gitLocationEnvVars are the environment variables that redirect git at a
+// specific repository, work tree, or index. A GitRepo is bound to repo.Path,
+// so its CLI invocations must run there; we drop these variables to keep an
+// ambient value (for example a GIT_DIR exported by a surrounding git hook)
+// from silently retargeting the command at a different repository.
+var gitLocationEnvVars = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_COMMON_DIR",
+	"GIT_NAMESPACE",
+}
+
+// envWithout returns os.Environ() with the named variables removed.
+func envWithout(names ...string) []string {
+	drop := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		drop[n] = struct{}{}
+	}
+	env := os.Environ()
+	result := make([]string, 0, len(env))
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, ok := drop[name]; ok {
+			continue
+		}
+		result = append(result, kv)
+	}
+	return result
+}
+
 // Run the given git command with the given I/O reader/writers, returning an error if it fails.
 func (repo *GitRepo) runGitCommandWithIO(stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repo.Path
+	cmd.Env = envWithout(gitLocationEnvVars...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -21,32 +22,50 @@ import (
 	"msrl.dev/git-appraise/repository"
 )
 
+// gitEnv is the process environment with all GIT_* variables removed. Git
+// exports GIT_DIR, GIT_INDEX_FILE, GIT_PREFIX, etc. to hooks it invokes; when
+// these tests run inside a pre-commit hook (e.g. via lefthook) those variables
+// leak into the child `git` processes below and make them operate on the outer
+// repository instead of the per-test temp dir. Scrubbing them keeps every
+// command scoped to its intended -C directory.
+func gitEnv() []string {
+	env := os.Environ()
+	cleaned := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "GIT_") {
+			cleaned = append(cleaned, kv)
+		}
+	}
+	return cleaned
+}
+
+func runGit(t *testing.T, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Env = gitEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+	}
+}
+
 func setupTestGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, args := range [][]string{
-		{"git", "init", dir},
-		{"git", "-C", dir, "config", "user.email", "test@test.com"},
-		{"git", "-C", dir, "config", "user.name", "Test"},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", err, out)
-		}
-	}
+	initTestGitRepo(t, dir)
+	return dir
+}
+
+// initTestGitRepo initializes a git repository with a single commit in dir.
+func initTestGitRepo(t *testing.T, dir string) {
+	t.Helper()
+	runGit(t, "init", dir)
+	runGit(t, "-C", dir, "config", "user.email", "test@test.com")
+	runGit(t, "-C", dir, "config", "user.name", "Test")
 	if err := os.WriteFile(dir+"/README.md", []byte("# Test Repo\nSome body.\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{
-		{"git", "-C", dir, "add", "."},
-		{"git", "-C", dir, "commit", "-m", "initial"},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v: %s", err, out)
-		}
-	}
-	return dir
+	runGit(t, "-C", dir, "add", ".")
+	runGit(t, "-C", dir, "commit", "-m", "initial")
 }
 
 // --- ServeMultiPaths tests ---
@@ -104,6 +123,86 @@ func TestReposDiscover(t *testing.T) {
 	}
 }
 
+// TestReposDiscoverPathMatchesKey guards against regressing the bug where the
+// discovered RepoDetails.Path was the repo's absolute filesystem root while the
+// map was keyed by the cwd-relative name. That mismatch both leaked the
+// server's directory layout in the repos.html links and produced links that
+// could not route back to the map entry.
+func TestReposDiscoverPathMatchesKey(t *testing.T) {
+	// Discover from a dedicated parent directory holding a single repo in a
+	// named subdirectory, so the repo is found as a child whose cwd-relative
+	// name (the map key) is a single path segment.
+	parent := t.TempDir()
+	name := "myrepo"
+	repoDir := filepath.Join(parent, name)
+	if err := os.Mkdir(repoDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	initTestGitRepo(t, repoDir)
+
+	old, _ := os.Getwd()
+	if err := os.Chdir(parent); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+
+	var repos Repos
+	repos.Store(new(reposMap))
+	if err := repos.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	loaded := repos.Load()
+	details, ok := loaded[name]
+	if !ok {
+		t.Fatalf("expected repo keyed by relative name %q, got map %v", name, loaded)
+	}
+	if details.Path != name {
+		t.Errorf("RepoDetails.Path = %q, want %q (must equal the map key)", details.Path, name)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/repos.html", nil)
+	repos.ServeReposTemplate(rec, req)
+	body := rec.Body.String()
+	if strings.Contains(body, parent) {
+		t.Errorf("repos.html leaks absolute server path %q in:\n%s", parent, body)
+	}
+	if !strings.Contains(body, `href="`+name+`/repo.html"`) {
+		t.Errorf("expected relative repo link in repos.html, got:\n%s", body)
+	}
+}
+
+// TestReposDiscoverCwdIsRepo covers running the server from inside a repo: the
+// cwd-relative path is ".", which HTTP clients normalize away, so the entry
+// must instead be keyed by the directory's base name to stay reachable.
+func TestReposDiscoverCwdIsRepo(t *testing.T) {
+	repoDir := setupTestGitRepo(t)
+	name := filepath.Base(repoDir)
+
+	old, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+
+	var repos Repos
+	repos.Store(new(reposMap))
+	if err := repos.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	loaded := repos.Load()
+	if _, ok := loaded["."]; ok {
+		t.Errorf(`repo keyed by ".", which is not addressable; got map %v`, loaded)
+	}
+	details, ok := loaded[name]
+	if !ok {
+		t.Fatalf("expected repo keyed by base name %q, got map %v", name, loaded)
+	}
+	if details.Path != name {
+		t.Errorf("RepoDetails.Path = %q, want %q", details.Path, name)
+	}
+}
+
 func TestReposDiscoverNonGitDir(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(dir+"/subdir", 0755)
@@ -134,10 +233,7 @@ func TestReposDiscoverEmptyGitRepo(t *testing.T) {
 	dir := t.TempDir()
 	emptyRepo := dir + "/empty-repo"
 	os.Mkdir(emptyRepo, 0755)
-	cmd := exec.Command("git", "init", emptyRepo)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init failed: %v\n%s", err, out)
-	}
+	runGit(t, "init", emptyRepo)
 
 	old, _ := os.Getwd()
 	if err := os.Chdir(dir); err != nil {
@@ -200,10 +296,7 @@ func TestReposDiscoverGetwdError(t *testing.T) {
 func TestReposDiscoverUpdateError(t *testing.T) {
 	dir := t.TempDir()
 	repoDir := dir + "/broken-repo"
-	cmd := exec.Command("git", "init", repoDir)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init failed: %v\n%s", err, out)
-	}
+	runGit(t, "init", repoDir)
 	// Corrupt packed-refs so GetRepoStateHash → References() fails.
 	os.WriteFile(repoDir+"/.git/packed-refs", []byte("corrupt\x00data\n"), 0644)
 

@@ -6,16 +6,16 @@
 		<link rel="stylesheet" href="{{paths.Css}}"/>
 	</head>
 	<body>
-		<h1 class="title">Repositories</h3>
+		<h1 class="title">Repositories</h1>
 		<ul>
 			{{range .Repos}}
-				<a href="{{.Path}}/{{paths.Repo}}">
-					<li>
+				<li>
+					<a href="{{.Path}}/{{paths.Repo}}">
 						<h3 class="title">{{.Title}}</h3>
 						<h4 class="subtitle">{{.Subtitle}}</h4>
-					</li>
-				</a>
-				<a href="{{$.GitWeb}}/{{.Path}}">Git Web</a>
+					</a>
+					<a href="{{$.GitWeb}}/{{.Path}}">Git Web</a>
+				</li>
 			{{end}}
 		</ul>
 	</body>
