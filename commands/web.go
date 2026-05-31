@@ -34,7 +34,7 @@ func webGenerateStatic(repoDetails *web.RepoDetails) error {
 	if err := repoDetails.Update(); err != nil {
 		return err
 	}
-	if err := os.Mkdir(*outputDir, os.ModeDir|0755); err != nil {
+	if err := os.Mkdir(*outputDir, 0o755); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			// Nothing to do
 		} else {
