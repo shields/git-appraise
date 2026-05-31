@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,11 +78,6 @@ func (oldRepos *Repos) Discover() error {
 			// segment, so the key must itself be a single segment. When cwd is
 			// a repo, relPath is "." (which HTTP clients normalize away); use
 			// the directory's base name instead so the entry stays reachable.
-			// Repos nested more than one level below cwd (relPath containing a
-			// slash) are intentionally left keyed by their relative path: the
-			// suffix-based /{repo}/repo.html scheme cannot address them, and
-			// inventing a flattened key risks colliding with a real top-level
-			// repo, so multi-level layouts are an unsupported deployment.
 			urlPath := filepath.ToSlash(relPath)
 			if urlPath == "." {
 				urlPath = filepath.Base(cwd)
@@ -90,6 +86,14 @@ func (oldRepos *Repos) Discover() error {
 			// leading slash so the rendered link is a relative "repo.html"
 			// path rather than a protocol-relative "//repo.html" URL.
 			urlPath = strings.TrimPrefix(urlPath, "/")
+			// A repo nested more than one level below cwd has a multi-segment
+			// relative path that the suffix-based /{repo}/repo.html scheme cannot
+			// address. Skip it rather than listing an unreachable entry (and do
+			// not descend into it).
+			if strings.Contains(urlPath, "/") {
+				log.Printf("git-appraise-web: skipping repository %q: nested repositories are not addressable by the single-segment URL scheme", urlPath)
+				return filepath.SkipDir
+			}
 			repoDetails.Path = urlPath
 			newRepos[urlPath] = repoDetails
 			return filepath.SkipDir
@@ -145,12 +149,10 @@ func (repos *Repos) ServeReviewTemplate(w http.ResponseWriter, r *http.Request) 
 
 func (repos *Repos) ServeReposTemplate(w http.ResponseWriter, r *http.Request) {
 	type ReposInfo struct {
-		Repos  reposMap
-		GitWeb string
+		Repos reposMap
 	}
 	reposInfo := ReposInfo{
-		Repos:  repos.Load(),
-		GitWeb: "/gitweb",
+		Repos: repos.Load(),
 	}
 	var writer bytes.Buffer
 	if err := web.ServeTemplate(reposInfo, ServeMultiPaths{}, &writer, "repos", repos_html); err != nil {
@@ -165,12 +167,21 @@ func (repos *Repos) ServeEntryPointRedirect(w http.ResponseWriter, r *http.Reque
 	http.Redirect(w, r, "/repos.html", http.StatusTemporaryRedirect)
 }
 
+// discoverAndLog refreshes the repository list, logging (rather than silently
+// swallowing) any discovery error so an empty listing is not served without
+// explanation.
+func discoverAndLog(repos *Repos) {
+	if err := repos.Discover(); err != nil {
+		log.Printf("git-appraise-web: failed to discover repositories: %v", err)
+	}
+}
+
 func webServe() {
 	var paths ServeMultiPaths
 	repos := Repos{}
 	repos.Store(new(reposMap))
 
-	repos.Discover()
+	discoverAndLog(&repos)
 
 	http.HandleFunc("/_ah/health",
 		func(w http.ResponseWriter, r *http.Request) {

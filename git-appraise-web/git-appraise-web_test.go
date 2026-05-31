@@ -203,6 +203,50 @@ func TestReposDiscoverCwdIsRepo(t *testing.T) {
 	}
 }
 
+func TestReposDiscoverNestedRepoSkipped(t *testing.T) {
+	// A repo nested more than one level below cwd cannot be addressed by the
+	// single-segment URL scheme, so Discover must skip it rather than list an
+	// unreachable entry.
+	parent := t.TempDir()
+	sub := filepath.Join(parent, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	repoDir := filepath.Join(sub, "deep")
+	if err := os.Mkdir(repoDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	initTestGitRepo(t, repoDir)
+
+	old, _ := os.Getwd()
+	if err := os.Chdir(parent); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+
+	var repos Repos
+	repos.Store(new(reposMap))
+	if err := repos.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if loaded := repos.Load(); len(loaded) != 0 {
+		t.Errorf("expected the nested repo to be skipped, got map %v", loaded)
+	}
+}
+
+func TestDiscoverAndLogError(t *testing.T) {
+	// A discovery failure must be logged rather than panicking or being
+	// silently swallowed.
+	origGetwd := getwdFn
+	defer func() { getwdFn = origGetwd }()
+	getwdFn = func() (string, error) {
+		return "", errors.New("simulated getwd failure")
+	}
+	var repos Repos
+	repos.Store(new(reposMap))
+	discoverAndLog(&repos) // must not panic
+}
+
 func TestReposDiscoverNonGitDir(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(dir+"/subdir", 0755)

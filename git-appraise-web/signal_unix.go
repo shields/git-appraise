@@ -13,7 +13,7 @@ func setupReloadOnSignal(repos *Repos) {
 	signal.Notify(sigs, syscall.SIGUSR1)
 	go func() {
 		for range sigs {
-			repos.Discover()
+			discoverAndLog(repos)
 		}
 	}()
 }
