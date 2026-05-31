@@ -2,7 +2,9 @@ package comment
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
+	"time"
 
 	"msrl.dev/git-appraise/repository"
 )
@@ -15,8 +17,12 @@ func TestNew(t *testing.T) {
 	if c.Description != "test description" {
 		t.Fatalf("unexpected description: %q", c.Description)
 	}
-	if c.Timestamp != "" {
-		t.Fatalf("expected empty timestamp, got %q", c.Timestamp)
+	ts, err := strconv.ParseInt(c.Timestamp, 10, 64)
+	if err != nil {
+		t.Fatalf("expected a numeric timestamp, got %q: %v", c.Timestamp, err)
+	}
+	if now := time.Now().Unix(); ts < now-60 || ts > now+60 {
+		t.Errorf("timestamp %d is not within 60s of now %d", ts, now)
 	}
 }
 

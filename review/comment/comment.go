@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"msrl.dev/git-appraise/repository"
 )
@@ -121,8 +122,8 @@ type Comment struct {
 	// Timestamp and Author are optimizations that allows us to display comment threads
 	// without having to run git-blame over the notes object. This is done because
 	// git-blame will become more and more expensive as the number of code reviews grows.
-	Timestamp string `json:"timestamp,omitempty"`
-	Author    string `json:"author,omitempty"`
+	Timestamp string `json:"timestamp"`
+	Author    string `json:"author"`
 	// If original is provided, then the comment is an updated version of another comment.
 	Original string `json:"original,omitempty"`
 	// If parent is provided, then the comment is a response to another comment.
@@ -142,9 +143,13 @@ type Comment struct {
 
 // New returns a new comment with the given description message.
 //
-// The Timestamp and Author fields are automatically filled in with the current time and user.
+// The Timestamp is set to the current time so the comment satisfies the schema
+// even when the caller does not set one (e.g. abandon and reject); callers that
+// honor an explicit commit date may overwrite it. The Author is the given
+// author.
 func New(author string, description string) Comment {
 	return Comment{
+		Timestamp:   strconv.FormatInt(time.Now().Unix(), 10),
 		Author:      author,
 		Description: description,
 	}

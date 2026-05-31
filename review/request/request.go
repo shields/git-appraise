@@ -19,6 +19,8 @@ package request
 
 import (
 	"encoding/json"
+	"strconv"
+	"time"
 
 	"msrl.dev/git-appraise/repository"
 )
@@ -31,15 +33,16 @@ const FormatVersion = 0
 
 // Request represents an initial request for a code review.
 //
-// Every field is optional.
+// Timestamp and Requester are required (see schema/request.json); the other
+// fields are optional.
 type Request struct {
 	// Timestamp and Requester are optimizations that allows us to display reviews
 	// without having to run git-blame over the notes object. This is done because
 	// git-blame will become more and more expensive as the number of reviews grows.
-	Timestamp   string   `json:"timestamp,omitempty"`
+	Timestamp   string   `json:"timestamp"`
 	ReviewRef   string   `json:"reviewRef,omitempty"`
 	TargetRef   string   `json:"targetRef"`
-	Requester   string   `json:"requester,omitempty"`
+	Requester   string   `json:"requester"`
 	Reviewers   []string `json:"reviewers,omitempty"`
 	Description string   `json:"description,omitempty"`
 	// Version represents the version of the metadata format.
@@ -56,9 +59,12 @@ type Request struct {
 
 // New returns a new request.
 //
-// The Timestamp and Requester fields are automatically filled in with the current time and user.
+// The Timestamp is set to the current time so the request satisfies the schema
+// even when the caller does not set one; callers that honor an explicit commit
+// date may overwrite it. The Requester is the given requester.
 func New(requester string, reviewers []string, reviewRef, targetRef, description string) Request {
 	return Request{
+		Timestamp:   strconv.FormatInt(time.Now().Unix(), 10),
 		Requester:   requester,
 		Reviewers:   reviewers,
 		ReviewRef:   reviewRef,
