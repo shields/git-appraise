@@ -95,6 +95,8 @@ github.com/gomarkdown/markdown v0.0.0-20260614153850-4ebefe1a0ab1 h1:OiQpZwBbSNZ
 github.com/gomarkdown/markdown v0.0.0-20260614153850-4ebefe1a0ab1/go.mod h1:JDGcbDT52eL4fju3sZ4TeHGsQwhG9nbDV21aMyhwPoA=
 github.com/gomarkdown/markdown v0.0.0-20260614204949-e08cff860f76 h1:Ltt9ldIaSYEsjA7sPY2c8r9dOmnKM1vlzhh3dxlhBHM=
 github.com/gomarkdown/markdown v0.0.0-20260614204949-e08cff860f76/go.mod h1:JDGcbDT52eL4fju3sZ4TeHGsQwhG9nbDV21aMyhwPoA=
+github.com/gomarkdown/markdown v0.0.0-20260725000948-8435af3f5984 h1:6DE2PprLLZelQJu7AeebZLxjcENwC1plRZHDvd5uMCU=
+github.com/gomarkdown/markdown v0.0.0-20260725000948-8435af3f5984/go.mod h1:JDGcbDT52eL4fju3sZ4TeHGsQwhG9nbDV21aMyhwPoA=
 github.com/gorilla/css v1.0.1 h1:ntNaBIghp6JmvWnxbZKANoLyuXTPZ4cAMlo6RyhlbO8=
 github.com/gorilla/css v1.0.1/go.mod h1:BvnYkspnSzMmwRK+b8/xgNPLiIuNZr6vbZBTPQ2A3b0=
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:BQSFePA1RWJOlocH6Fxy8MmwDt+yVQYULKfN0RoTN8A=
