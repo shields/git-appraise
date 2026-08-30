@@ -1,6 +1,6 @@
 module msrl.dev/git-appraise
 
-go 1.26.4
+go 1.27
 
 require (
 	github.com/bluekeyes/go-gitdiff v0.9.0
