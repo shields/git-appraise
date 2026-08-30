@@ -18,7 +18,8 @@ package repository
 
 import (
 	"crypto/sha1"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"sort"
 	"strings"
@@ -90,7 +91,7 @@ func (r *mockRepoForTest) createCommit(message, time, tree string, parents []str
 		Parents: parents,
 		Tree:    tree,
 	}
-	newCommitJSON, _ := json.Marshal(newCommit)
+	newCommitJSON, _ := jsonv2.Marshal(newCommit, jsonv1.DefaultOptionsV1())
 	newCommitHash := fmt.Sprintf("%x", sha1.Sum([]byte(newCommitJSON)))
 	r.Commits[newCommitHash] = newCommit
 	return newCommitHash
@@ -189,7 +190,7 @@ func (r *mockRepoForTest) GetDataDir() (string, error) { return "~/mockRepo/.git
 
 // GetRepoStateHash returns a hash which embodies the entire current state of a repository.
 func (r *mockRepoForTest) GetRepoStateHash() (string, error) {
-	repoJSON, _ := json.Marshal(r)
+	repoJSON, _ := jsonv2.Marshal(r, jsonv1.DefaultOptionsV1())
 	return fmt.Sprintf("%x", sha1.Sum([]byte(repoJSON))), nil
 }
 

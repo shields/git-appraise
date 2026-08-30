@@ -18,14 +18,23 @@ limitations under the License.
 package commands
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 
 	"msrl.dev/git-appraise/repository"
 	"msrl.dev/git-appraise/review/request"
 )
 
 // Test seams; not safe for t.Parallel().
-var jsonMarshalIndent = json.MarshalIndent
+var jsonMarshalIndent = func(in any, prefix, indent string) ([]byte, error) {
+	return jsonv2.Marshal(
+		in,
+		jsonv1.DefaultOptionsV1(),
+		jsontext.WithIndentPrefix(prefix),
+		jsontext.WithIndent(indent),
+	)
+}
 var writeRequest = func(r *request.Request) (repository.Note, error) { return r.Write() }
 
 const notesRefPattern = "refs/notes/devtools/*"

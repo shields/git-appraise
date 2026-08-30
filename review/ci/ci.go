@@ -18,10 +18,12 @@ limitations under the License.
 package ci
 
 import (
-	"encoding/json"
-	"msrl.dev/git-appraise/repository"
+	jsonv1 "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"sort"
 	"strconv"
+
+	"msrl.dev/git-appraise/repository"
 )
 
 const (
@@ -46,14 +48,14 @@ type Report struct {
 	Status    string `json:"status,omitempty"`
 	Agent     string `json:"agent,omitempty"`
 	// Version represents the version of the metadata format.
-	Version int `json:"v,omitempty"`
+	Version int `json:"v,omitzero"`
 }
 
 // Parse parses a CI report from a git note.
 func Parse(note repository.Note) (Report, error) {
 	bytes := []byte(note)
 	var report Report
-	err := json.Unmarshal(bytes, &report)
+	err := jsonv2.Unmarshal(bytes, &report, jsonv1.DefaultOptionsV1())
 	return report, err
 }
 

@@ -18,8 +18,9 @@ limitations under the License.
 package review
 
 import (
-	"bytes"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"sort"
 	"strconv"
@@ -37,7 +38,9 @@ var emptyTree = repository.NewTree(map[string]repository.TreeChild{})
 
 // Test seams: these package-level vars allow tests to inject failures.
 // Tests that override them are not safe for t.Parallel().
-var jsonMarshal = json.Marshal
+var jsonMarshal = func(in any) ([]byte, error) {
+	return jsonv2.Marshal(in, jsonv1.DefaultOptionsV1())
+}
 
 var writeComment = func(c comment.Comment) (repository.Note, error) {
 	return c.Write()
@@ -62,7 +65,7 @@ type CommentThread struct {
 	Edits    []*comment.Comment `json:"edits,omitempty"`
 	Children []CommentThread    `json:"children,omitempty"`
 	Resolved *bool              `json:"resolved,omitempty"`
-	Edited   bool               `json:"edited,omitempty"`
+	Edited   bool               `json:"edited,omitzero"`
 }
 
 // Summary represents the high-level state of a code review.
@@ -528,12 +531,11 @@ func (r *Review) GetAnalysesMessage() string {
 }
 
 func prettyPrintJSON(jsonBytes []byte) (string, error) {
-	var prettyBytes bytes.Buffer
-	err := json.Indent(&prettyBytes, jsonBytes, "", "  ")
-	if err != nil {
+	prettyBytes := jsontext.Value(append([]byte(nil), jsonBytes...))
+	if err := prettyBytes.Indent(jsontext.WithIndent("  ")); err != nil {
 		return "", err
 	}
-	return prettyBytes.String(), nil
+	return string(prettyBytes), nil
 }
 
 // GetCommentsJSON returns the pretty printed JSON for a slice of comment threads.

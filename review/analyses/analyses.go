@@ -18,9 +18,9 @@ limitations under the License.
 package analyses
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
-
 	"net/http"
 	"sort"
 	"strconv"
@@ -50,15 +50,15 @@ type Report struct {
 	URL       string `json:"url,omitempty"`
 	Status    string `json:"status,omitempty"`
 	// Version represents the version of the metadata format.
-	Version int `json:"v,omitempty"`
+	Version int `json:"v,omitzero"`
 }
 
 // LocationRange represents the location within a source file that an analysis message covers.
 type LocationRange struct {
-	StartLine   uint32 `json:"start_line,omitempty"`
-	StartColumn uint32 `json:"start_column,omitempty"`
-	EndLine     uint32 `json:"end_line,omitempty"`
-	EndColumn   uint32 `json:"end_column,omitempty"`
+	StartLine   uint32 `json:"start_line,omitzero"`
+	StartColumn uint32 `json:"start_column,omitzero"`
+	EndLine     uint32 `json:"end_line,omitzero"`
+	EndColumn   uint32 `json:"end_column,omitzero"`
 }
 
 // Location represents the location within a source tree that an analysis message covers.
@@ -99,7 +99,11 @@ func (analysesReport Report) GetLintReportResult() ([]AnalyzeResponse, error) {
 		return nil, err
 	}
 	var details ReportDetails
-	err = json.Unmarshal([]byte(analysesResults), &details)
+	err = jsonv2.Unmarshal(
+		[]byte(analysesResults),
+		&details,
+		jsonv1.DefaultOptionsV1(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +127,7 @@ func (analysesReport Report) GetNotes() ([]Note, error) {
 func Parse(note repository.Note) (Report, error) {
 	bytes := []byte(note)
 	var report Report
-	err := json.Unmarshal(bytes, &report)
+	err := jsonv2.Unmarshal(bytes, &report, jsonv1.DefaultOptionsV1())
 	return report, err
 }
 

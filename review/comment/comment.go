@@ -19,7 +19,8 @@ package comment
 
 import (
 	"crypto/sha1"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"strconv"
@@ -42,9 +43,9 @@ var ErrInvalidRange = errors.New("invalid file location range. The required form
 // Range represents the range of text that is under discussion.
 type Range struct {
 	StartLine   uint32 `json:"startLine"`
-	StartColumn uint32 `json:"startColumn,omitempty"`
-	EndLine     uint32 `json:"endLine,omitempty"`
-	EndColumn   uint32 `json:"endColumn,omitempty"`
+	StartColumn uint32 `json:"startColumn,omitzero"`
+	EndLine     uint32 `json:"endLine,omitzero"`
+	EndColumn   uint32 `json:"endColumn,omitzero"`
 }
 
 // Location represents the location of a comment within a commit.
@@ -138,7 +139,7 @@ type Comment struct {
 	// change has been accepted. If the resolved bit is unset, then the comment is only an FYI.
 	Resolved *bool `json:"resolved,omitempty"`
 	// Version represents the version of the metadata format.
-	Version int `json:"v,omitempty"`
+	Version int `json:"v,omitzero"`
 }
 
 // New returns a new comment with the given description message.
@@ -159,7 +160,7 @@ func New(author string, description string) Comment {
 func Parse(note repository.Note) (Comment, error) {
 	bytes := []byte(note)
 	var comment Comment
-	err := json.Unmarshal(bytes, &comment)
+	err := jsonv2.Unmarshal(bytes, &comment, jsonv1.DefaultOptionsV1())
 	return comment, err
 }
 
@@ -193,7 +194,7 @@ func (comment Comment) serialize() ([]byte, error) {
 		// We ignore the other case, as the comment timestamp is not in a format
 		// we expected, so we should just leave it alone.
 	}
-	return json.Marshal(comment)
+	return jsonv2.Marshal(comment, jsonv1.DefaultOptionsV1())
 }
 
 // Write writes a review comment as a JSON-formatted git note.

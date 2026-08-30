@@ -106,6 +106,21 @@ func TestHashDeterministic(t *testing.T) {
 	}
 }
 
+func TestWritePreservesHashEscaping(t *testing.T) {
+	c := Comment{
+		Timestamp:   "1234567890",
+		Description: "<tag> & \u2028 \u2029",
+	}
+	note, err := c.Write()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"timestamp":"1234567890","author":"","description":"\u003ctag\u003e \u0026 \u2028 \u2029"}`
+	if string(note) != want {
+		t.Fatalf("unexpected serialized comment:\n got: %s\nwant: %s", note, want)
+	}
+}
+
 func TestHashTimestampPadding(t *testing.T) {
 	c1 := New("user@example.com", "padding test")
 	c1.Timestamp = "1"

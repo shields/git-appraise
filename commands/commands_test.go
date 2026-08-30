@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -3274,7 +3274,7 @@ func TestWebCmdRunMethodWithPortUpdateError(t *testing.T) {
 }
 
 func TestDefaultJsonMarshalIndent(t *testing.T) {
-	b, err := json.MarshalIndent([]int{1}, "", "  ")
+	b, err := jsonv1.MarshalIndent([]int{1}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3283,6 +3283,6 @@ func TestDefaultJsonMarshalIndent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(b) != string(b2) {
-		t.Error("jsonMarshalIndent should match json.MarshalIndent by default")
+		t.Error("jsonMarshalIndent should preserve encoding/json behavior")
 	}
 }

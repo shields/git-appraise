@@ -18,7 +18,8 @@ limitations under the License.
 package request
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"strconv"
 	"time"
 
@@ -46,7 +47,7 @@ type Request struct {
 	Reviewers   []string `json:"reviewers,omitempty"`
 	Description string   `json:"description,omitempty"`
 	// Version represents the version of the metadata format.
-	Version int `json:"v,omitempty"`
+	Version int `json:"v,omitzero"`
 	// BaseCommit stores the commit ID of the target ref at the time the review was requested.
 	// This is optional, and only used for submitted reviews which were anchored at a merge commit.
 	// This allows someone viewing that submitted review to find the diff against which the
@@ -77,7 +78,7 @@ func New(requester string, reviewers []string, reviewRef, targetRef, description
 func Parse(note repository.Note) (Request, error) {
 	bytes := []byte(note)
 	var request Request
-	err := json.Unmarshal(bytes, &request)
+	err := jsonv2.Unmarshal(bytes, &request, jsonv1.DefaultOptionsV1())
 	// TODO(ojarjur): If "requester" is not set, then use git-blame to fill it in.
 	return request, err
 }
@@ -99,6 +100,6 @@ func ParseAllValid(notes []repository.Note) []Request {
 
 // Write writes a review request as a JSON-formatted git note.
 func (request *Request) Write() (repository.Note, error) {
-	bytes, err := json.Marshal(request)
+	bytes, err := jsonv2.Marshal(request, jsonv1.DefaultOptionsV1())
 	return repository.Note(bytes), err
 }
