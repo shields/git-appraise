@@ -5,7 +5,7 @@ go 1.27
 require (
 	github.com/bluekeyes/go-gitdiff v0.9.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/gomarkdown/markdown v0.0.0-20260917010721-cc30ffac3c05
+	github.com/gomarkdown/markdown v0.0.0-20260921172736-e177decc3c2f
 	github.com/mattn/go-runewidth v0.0.30
 	github.com/microcosm-cc/bluemonday v1.0.27
 )
