@@ -6,7 +6,7 @@ require (
 	github.com/bluekeyes/go-gitdiff v0.9.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/gomarkdown/markdown v0.0.0-20261006233006-5e92716d526e
-	github.com/mattn/go-runewidth v0.0.30
+	github.com/mattn/go-runewidth v0.0.31
 	github.com/microcosm-cc/bluemonday v1.0.27
 )
 
